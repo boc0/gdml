@@ -1,5 +1,4 @@
 import numpy as np
-from sklearn.kernel_ridge import KernelRidge
 from scipy.spatial.distance import pdist, cdist, squareform
 
 def descriptor(x: np.ndarray, Z=[8,8,1,1]) -> np.ndarray:
@@ -13,10 +12,6 @@ def descriptor(x: np.ndarray, Z=[8,8,1,1]) -> np.ndarray:
                 C[i, j] = Z[i] * Z[j] / np.linalg.norm(x[i] - x[j])
     return C
 
-def kernel(x, x_, sigma=1) -> float:
-    # x, x_ = descriptor(x).flatten(), descriptor(x_).flatten()
-    return np.exp(-np.linalg.norm(x - x_)**2 / sigma)
-
 
 def gaussian(X,sigma=1):
     X = [descriptor(x).flatten() for x in X]
@@ -24,11 +19,11 @@ def gaussian(X,sigma=1):
     return np.exp(-pairwise_dists ** 2 / sigma ** 2)
 
 def kstar(x, X, sigma=1):
-    x = [descriptor(x_).flatten() for x_ in x]
+    x = descriptor(x).flatten()
     X = [descriptor(x_).flatten() for x_ in X]
-    dists = cdist(x, X)
+    dists = cdist([x], X)
     kstar = np.exp(-dists ** 2 / sigma ** 2)
-    return kstar
+    return kstar[0, :]
 
 if __name__ == '__main__':
     data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
@@ -36,12 +31,11 @@ if __name__ == '__main__':
     y = data['E']
     K = gaussian(X)
 
-    model = KernelRidge(kernel='precomputed')
-    model.fit(K, y)
+    lamb = 1
+    alphas = np.linalg.solve(K + lamb * np.eye(50000), y)
+    alphas = alphas[:, 0]
 
-    k = kstar([X[10002]], X[:10000])
-    k.shape
-    yhat = model.predict(k)
-    yreal = y[10002]
+    k = kstar(X[1], X)
+    yhat = np.sum(alphas * k)
+    yreal = y[1]
     yhat, yreal
-    
