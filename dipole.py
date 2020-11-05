@@ -66,13 +66,6 @@ def kernel_matrix(X, sigma=1):
     blocks = [list(x) for x in K]
     return np.block(blocks)
 
-@jit
-def predict(x, samples, X, alphas, sigma):
-    mu = np.zeros(3)
-    for i in range(samples):
-        mu += kernel(x, X[i], sigma=sigma) @ alphas[i]
-    return mu
-
 
 class VectorValuedKRR(KRR):
 
@@ -86,7 +79,14 @@ class VectorValuedKRR(KRR):
         self.alphas = alphas.reshape(samples, 3)
 
     def predict(self, x):
-        results = [predict(_x, samples=self.samples, X=self.X, alphas=self.alphas, sigma=self.sigma) for _x in x]
+        @jit
+        @vmap
+        def predict(x):
+            mu = np.zeros(3)
+            for i in range(samples):
+                mu += kernel(x, X[i], sigma=sigma) @ alphas[i]
+            return mu
+        results = predict(x)
         return np.array(results)
 
     def score(self, x, y):
