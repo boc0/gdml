@@ -90,10 +90,9 @@ class VectorValuedKRR(KRR):
         return -np.mean(np.sum(np.abs(y - yhat), axis=1))
 
 
-sigma_choices = list(np.linspace(0.25, 1, 4))
+sigma_choices = list(np.linspace(0.25, 3, 12))
 parameters = {'sigma': sigma_choices}
-# data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
-data_subset_sizes = [5, 6]
+data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
 test = slice(20000, 20100)
 errors = []
 
