@@ -21,7 +21,7 @@ y = np.array(data['D'])
 def fill_diagonal(a, value):
     return jax.ops.index_update(a, np.diag_indices(a.shape[0]), value)
 
-
+@jit
 def descriptor(x):
     distances = np.sum((x[:, None] - x[None, :])**2, axis=-1)
     distances = fill_diagonal(distances, 1) # because sqrt fails to compute gradient if called on 0s
@@ -31,22 +31,26 @@ def descriptor(x):
     D = fill_diagonal(D, 0)
     return D.flatten()
 
+@jit
 def gaussian(x, x_, sigma=1):
     d, d_ = descriptor(x), descriptor(x_)
     sq_distance = np.sum((d - d_)**2)
     return np.exp(-sq_distance / sigma)
 
+@jit
 def hess_ij(H):
     return np.sum(H, axis=(0, 2))
 
 def hessian(f):
     return jacfwd(jacrev(f))
 
+@jit
 def kernel(x, x_, sigma=1):
     _gaussian = partial(gaussian, x, sigma=sigma)
     hess = hessian(_gaussian)
     return hess_ij(hess(x_))
 
+@jit
 def kernel_matrix(X, sigma=1):
     def kernel(x, x_):
         _gaussian = partial(gaussian, x, sigma=sigma)
@@ -62,7 +66,7 @@ def kernel_matrix(X, sigma=1):
     blocks = [list(x) for x in K]
     return np.block(blocks)
 
-
+@jit
 def predict(x, samples, X, alphas, sigma):
     mu = np.zeros(3)
     for i in range(samples):
