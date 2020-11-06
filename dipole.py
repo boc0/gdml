@@ -85,22 +85,22 @@ from time import time
 
 for size in data_subset_sizes:
     start = time()
-    print(f'{size=}')
+    print(f'size: {size}')
 
     cross_validation = GridSearchCV(VectorValuedKRR(), parameters)
     cross_validation.fit(X[:size], y[:size])
     results = cross_validation.cv_results_
     best = np.argmin(results['rank_test_score'])
     best_sigma = results['param_sigma'][best]
-    print(f'{best_sigma=}')
+    print(f'best sigma: {best_sigma}')
     best_model = VectorValuedKRR(sigma=best_sigma)
     best_model.fit(X[:size], y[:size])
     best_test_error = -best_model.score(X[test], y[test]).item()
     best_model.save()
-    print(f'{best_test_error=}')
+    print(f'best test error: {best_test_error}')
     errors.append(best_test_error)
     taken = time() - start
-    print(f'{taken=}', end='\n\n')
+    print(f'time taken: {taken}', end='\n\n')
 
 data = pd.DataFrame({'samples trained on': data_subset_sizes, 'mean absolute error': errors})
 sns.pointplot(x='samples trained on', y='mean absolute error', data=data, s=100)
