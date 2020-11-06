@@ -2,6 +2,22 @@ from sklearn.base import BaseEstimator
 import numpy as np
 import jax.ops
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib import animation
+
+
+def heatmap_animation(generator, name='what', **heatmap_kwargs):
+    kwargs = {'xticklabels': False, 'yticklabels': False, **heatmap_kwargs}
+
+    def animate(i):
+        plt.clf()
+        data = generator(i)
+        sns.heatmap(data, **kwargs)
+
+    anim = animation.FuncAnimation(plt.figure(), animate, frames=20, repeat=False)
+    anim.save(f'{name}.gif')
+
 
 class KRR(BaseEstimator):
     def __init__(self, sigma=1):
