@@ -55,3 +55,7 @@ def gaussian(x, x_, sigma=1):
     d, d_ = descriptor(x), descriptor(x_)
     sq_distance = np.sum((d - d_)**2)
     return np.exp(-sq_distance / sigma)
+
+def matrix_heatmap(matrix, **kwargs):
+    ax = sns.heatmap(matrix, xticklabels=False, yticklabels=False, **kwargs)
+    plt.show()
