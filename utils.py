@@ -1,6 +1,6 @@
 from sklearn.base import BaseEstimator
-import numpy as np
 import jax.ops
+import jax.numpy as np
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -16,7 +16,7 @@ def heatmap_animation(generator, name='what', **heatmap_kwargs):
         sns.heatmap(data, **kwargs)
 
     anim = animation.FuncAnimation(plt.figure(), animate, frames=20, repeat=False)
-    anim.save(f'{name}.gif')
+    anim.save(f'images/{name}.gif')
 
 
 class KRR(BaseEstimator):
