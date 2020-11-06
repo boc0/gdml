@@ -12,34 +12,12 @@ from matplotlib import animation
 
 from sklearn.model_selection import GridSearchCV
 
-from utils import KRR
+from utils import KRR, gaussian, fill_diagonal
 
 data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
 X = np.array(data['R'])
 y = np.array(data['D'])
 
-def fill_diagonal(a, value):
-    return jax.ops.index_update(a, np.diag_indices(a.shape[0]), value)
-
-@jit
-def descriptor(x):
-    distances = np.sum((x[:, None] - x[None, :])**2, axis=-1)
-    distances = fill_diagonal(distances, 1) # because sqrt fails to compute gradient if called on 0s
-    distances = np.sqrt(distances)
-    D = 1 / distances
-    D = np.tril(D)
-    D = fill_diagonal(D, 0)
-    return D.flatten()
-
-@jit
-def gaussian(x, x_, sigma=1):
-    d, d_ = descriptor(x), descriptor(x_)
-    sq_distance = np.sum((d - d_)**2)
-    return np.exp(-sq_distance / sigma)
-
-@jit
-def hess_ij(H):
-    return np.sum(H, axis=(0, 2))
 
 def hessian(f):
     return jacfwd(jacrev(f))
@@ -48,20 +26,15 @@ def hessian(f):
 def kernel(x, x_, sigma=1):
     _gaussian = partial(gaussian, x, sigma=sigma)
     hess = hessian(_gaussian)
-    return hess_ij(hess(x_))
+    return np.sum(hess(x_), axis=(0, 2))
 
 @jit
 def kernel_matrix(X, sigma=1):
-    def kernel(x, x_):
-        _gaussian = partial(gaussian, x, sigma=sigma)
-        hess = hessian(_gaussian)
-        return hess_ij(hess(x_))
-
+    _kernel = partial(kernel, sigma=sigma)
     @vmap
-    def _kernels(x, sigma=sigma):
-        _kernel = vmap(partial(kernel, x))
-        return _kernel(X)
-
+    def _kernels(x):
+        vec_kernel = vmap(partial(_kernel, x))
+        return vec_kernel(X)
     K = _kernels(X)
     blocks = [list(x) for x in K]
     return np.block(blocks)
@@ -79,12 +52,14 @@ class VectorValuedKRR(KRR):
         self.alphas = alphas.reshape(samples, 3)
 
     def predict(self, x):
-        @jit
+        def contribution(i, x):
+            return kernel(x, X[i], sigma=self.sigma) @ self.alphas[i]
         @vmap
         def predict(x):
-            mu = np.zeros(3)
-            for i in range(samples):
-                mu += kernel(x, X[i], sigma=sigma) @ alphas[i]
+            indices = np.arange(self.samples)
+            _contribution = vmap(partial(contribution, x=x))
+            contributions = _contribution(indices)
+            mu = np.sum(contributions, axis=0)
             return mu
         results = predict(x)
         return np.array(results)
@@ -93,14 +68,23 @@ class VectorValuedKRR(KRR):
         yhat = self.predict(x)
         return -np.mean(np.sum(np.abs(y - yhat), axis=1))
 
+model = VectorValuedKRR()
+model.fit(X[:10], y[:10])
+print(model.predict(X[:2]))
+print(y[:2])
+print(model.score(X[10:20], y[10:20]))
+
 
 sigma_choices = list(np.linspace(0.25, 3, 12))
 parameters = {'sigma': sigma_choices}
-data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
+data_subset_sizes = np.linspace(100, 500, 5, dtype=int)
 test = slice(20000, 20100)
 errors = []
 
+from time import time
+
 for size in data_subset_sizes:
+    start = time()
     print(f'{size=}')
 
     cross_validation = GridSearchCV(VectorValuedKRR(), parameters)
@@ -115,7 +99,8 @@ for size in data_subset_sizes:
     best_model.save()
     print(f'{best_test_error=}')
     errors.append(best_test_error)
-
+    taken = time() - start
+    print(f'{taken=}', end='\n\n')
 
 data = pd.DataFrame({'samples trained on': data_subset_sizes, 'mean absolute error': errors})
 sns.pointplot(x='samples trained on', y='mean absolute error', data=data, s=100)
