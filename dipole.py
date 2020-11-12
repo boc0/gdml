@@ -3,16 +3,15 @@ from functools import partial
 import pandas as pd
 
 import jax.numpy as np
-import jax.ops
-from jax import grad, jit, vmap, jacfwd, jacrev
+from jax import jit, vmap, jacfwd, jacrev
 
 import seaborn as sns
 import matplotlib.pyplot as plt
-from matplotlib import animation
 
 from sklearn.model_selection import GridSearchCV
 
-from utils import KRR, gaussian, fill_diagonal
+from utils import KRR, gaussian, fill_diagonal, descriptor
+
 
 data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
 X = np.array(data['R'])
@@ -22,11 +21,69 @@ y = np.array(data['D'])
 def hessian(f):
     return jacfwd(jacrev(f))
 
-@jit
+
+
+def hess_at(H, i, j):
+    return H[i, :, j, :]
+
+def symmetric(H):
+    sym = np.allclose(H, H.T)
+    return sym
+
+import itertools
+
+
 def kernel(x, x_, sigma=1):
     _gaussian = partial(gaussian, x, sigma=sigma)
     hess = hessian(_gaussian)
-    return np.sum(hess(x_), axis=(0, 2))
+    H = hess(x_)
+    K = np.zeros((3,3))
+    indices = itertools.product(range(4), repeat=2)
+    indices = [(i, j) for i, j in indices if i <= j]
+    for i, j in indices:
+    # for i in range(4):
+    #     for j in range(4):
+
+        new = hess_at(H, i, j) + hess_at(H, j, i)
+        # print(new)
+        # if i == j:
+        # update = (new + new.T) / 2
+        # print(update)
+        new = (new + new.T) / 2
+        # print(symmetric(K), end=' ')
+        K += new
+        # print(symmetric(new), end=' ')
+        # print(symmetric(K))
+    return K
+    # return np.sum(hess(x_), axis=(0, 2))
+
+'''
+k = kernel(X[0], X[1])
+print(k)
+
+
+k_ = kernel(X[1], X[40000])
+print(k_)
+
+
+_gaussian = partial(gaussian, X[0])
+_hess = hessian(_gaussian)
+print(_hess(X[1]).shape)
+
+for k in range(3):
+    H = _hess(X[k])
+    for i in range(4):
+        for j in range(4):
+            print(symmetric(hess_at(H, i, j) + hess_at(H, j, i)), end=' ')
+    print()
+
+for i in range(5):
+    for j in range(5):
+        k = kernel(X[i], X[j])
+        print(symmetric(k), end=' ')
+    print()
+
+'''
 
 @jit
 def kernel_matrix(X, sigma=1):
@@ -68,16 +125,17 @@ class VectorValuedKRR(KRR):
         yhat = self.predict(x)
         return -np.mean(np.sum(np.abs(y - yhat), axis=1))
 
+'''
 model = VectorValuedKRR()
 model.fit(X[:10], y[:10])
-print(model.predict(X[:2]))
-print(y[:2])
-print(model.score(X[10:20], y[10:20]))
+print(model.predict(X[20000:20002]))
+print(y[20000:20002])
+print(model.score(X[test], y[test]))
+'''
 
-
-sigma_choices = list(np.linspace(0.25, 3, 12))
+sigma_choices = list(np.linspace(0.25, 1, 4))
 parameters = {'sigma': sigma_choices}
-data_subset_sizes = np.linspace(100, 500, 5, dtype=int)
+data_subset_sizes = np.linspace(200, 300, 2, dtype=int)
 test = slice(20000, 20100)
 errors = []
 
