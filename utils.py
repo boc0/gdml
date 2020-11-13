@@ -1,6 +1,7 @@
 from sklearn.base import BaseEstimator
 import jax.ops
 import jax.numpy as np
+from jax import jit
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -20,8 +21,8 @@ def heatmap_animation(generator, name='what', **heatmap_kwargs):
 
 
 class KRR(BaseEstimator):
-    def __init__(self, sigma=1):
-        self.lamb = 1e-15
+    def __init__(self, sigma=1, lamb=1e-15):
+        self.lamb = lamb
         self.sigma = sigma
 
     @property
@@ -29,7 +30,7 @@ class KRR(BaseEstimator):
         return self.X.shape[0]
 
     def save(self):
-        np.savez_compressed(f'models/{self.samples}', X=self.X, alphas=self.alphas)
+        np.savez(f'models/{self.samples}', X=self.X, alphas=self.alphas)
 
     def load(self, name):
         data = np.load(f'models/{name}.npz')
@@ -40,9 +41,9 @@ class KRR(BaseEstimator):
 def fill_diagonal(a, value):
     return jax.ops.index_update(a, np.diag_indices(a.shape[0]), value)
 
-
+@jit
 def descriptor(x):
-    distances = np.sum((x[:, None] - x[None, :])**2, axis=-1)
+    distances = np.sum((x[:, None, :] - x[None, :, :])**2, axis=-1)
     distances = fill_diagonal(distances, 1) # because sqrt fails to compute gradient if called on 0s
     distances = np.sqrt(distances)
     D = 1 / distances
@@ -50,7 +51,7 @@ def descriptor(x):
     D = fill_diagonal(D, 0)
     return D.flatten()
 
-
+@jit
 def gaussian(x, x_, sigma=1):
     d, d_ = descriptor(x), descriptor(x_)
     sq_distance = np.sum((d - d_)**2)

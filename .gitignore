@@ -3,3 +3,7 @@ data
 .DS_Store
 *checkpoint.ipynb
 *.pyc
+images
+models
+*.png
+notes.py
