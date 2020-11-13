@@ -63,6 +63,9 @@ class VectorValuedKRR(KRR):
         self.X = X
         samples = X.shape[0]
         K = kernel_matrix(X, sigma=self.sigma)
+        self.means = np.mean(y, axis=0)
+        self.stdevs = np.std(y, axis=0)
+        y = (y - self.means) / self.stdevs
         y = y.reshape(samples * 3)
         K = fill_diagonal(K, K.diagonal() + self.lamb)
         alphas = np.linalg.solve(K, y)
@@ -79,7 +82,7 @@ class VectorValuedKRR(KRR):
             mu = np.sum(contributions, axis=0)
             return mu
         results = predict(x)
-        return np.array(results)
+        return np.array(results) * self.stdevs + self.means
 
     def score(self, x, y):
         yhat = self.predict(x)
@@ -117,4 +120,4 @@ for size in data_subset_sizes:
 
 data = pd.DataFrame({'samples trained on': data_subset_sizes, 'mean absolute error': errors})
 sns.pointplot(x='samples trained on', y='mean absolute error', data=data, s=100)
-plt.savefig('learning_curve.png')
+plt.savefig('newer_learning_curve.png')
