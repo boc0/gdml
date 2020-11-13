@@ -30,60 +30,20 @@ def symmetric(H):
     sym = np.allclose(H, H.T)
     return sym
 
-import itertools
-
 
 def kernel(x, x_, sigma=1):
     _gaussian = partial(gaussian, x, sigma=sigma)
     hess = hessian(_gaussian)
     H = hess(x_)
     K = np.zeros((3,3))
-    indices = itertools.product(range(4), repeat=2)
-    indices = [(i, j) for i, j in indices if i <= j]
-    for i, j in indices:
-    # for i in range(4):
-    #     for j in range(4):
-
-        new = hess_at(H, i, j) + hess_at(H, j, i)
-        # print(new)
-        # if i == j:
-        # update = (new + new.T) / 2
-        # print(update)
-        new = (new + new.T) / 2
-        # print(symmetric(K), end=' ')
-        K += new
-        # print(symmetric(new), end=' ')
-        # print(symmetric(K))
+    for i in range(4):
+        for j in range(4):
+            new = hess_at(H, i, j)
+            K += new
     return K
     # return np.sum(hess(x_), axis=(0, 2))
 
-'''
-k = kernel(X[0], X[1])
-print(k)
 
-
-k_ = kernel(X[1], X[40000])
-print(k_)
-
-
-_gaussian = partial(gaussian, X[0])
-_hess = hessian(_gaussian)
-print(_hess(X[1]).shape)
-
-for k in range(3):
-    H = _hess(X[k])
-    for i in range(4):
-        for j in range(4):
-            print(symmetric(hess_at(H, i, j) + hess_at(H, j, i)), end=' ')
-    print()
-
-for i in range(5):
-    for j in range(5):
-        k = kernel(X[i], X[j])
-        print(symmetric(k), end=' ')
-    print()
-
-'''
 
 @jit
 def kernel_matrix(X, sigma=1):
@@ -125,17 +85,11 @@ class VectorValuedKRR(KRR):
         yhat = self.predict(x)
         return -np.mean(np.sum(np.abs(y - yhat), axis=1))
 
-'''
-model = VectorValuedKRR()
-model.fit(X[:10], y[:10])
-print(model.predict(X[20000:20002]))
-print(y[20000:20002])
-print(model.score(X[test], y[test]))
-'''
 
-sigma_choices = list(np.linspace(0.25, 1, 4))
-parameters = {'sigma': sigma_choices}
-data_subset_sizes = np.linspace(200, 300, 2, dtype=int)
+sigma_choices = list(np.linspace(0.25, 2, 8))
+lambda_choices = [1e-5]#, 1e-4, 1e-3, 1e-2, 1]
+parameters = {'sigma': sigma_choices, 'lamb': lambda_choices}
+data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
 test = slice(20000, 20100)
 errors = []
 
@@ -149,13 +103,14 @@ for size in data_subset_sizes:
     cross_validation.fit(X[:size], y[:size])
     results = cross_validation.cv_results_
     best = np.argmin(results['rank_test_score'])
-    best_sigma = results['param_sigma'][best]
-    print(f'best sigma: {best_sigma}')
-    best_model = VectorValuedKRR(sigma=best_sigma)
+    best_params = results['params'][best]
+    print(f'best params: {best_params}')
+    best_model = VectorValuedKRR(**best_params)
     best_model.fit(X[:size], y[:size])
     best_test_error = -best_model.score(X[test], y[test]).item()
     best_model.save()
     print(f'best test error: {best_test_error}')
+
     errors.append(best_test_error)
     taken = time() - start
     print(f'time taken: {taken}', end='\n\n')
