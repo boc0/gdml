@@ -21,7 +21,7 @@ def heatmap_animation(generator, name='what', **heatmap_kwargs):
 
 
 class KRR(BaseEstimator):
-    def __init__(self, sigma=1, lamb=1e-15):
+    def __init__(self, sigma=1, lamb=1e-5):
         self.lamb = lamb
         self.sigma = sigma
 

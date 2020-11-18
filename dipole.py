@@ -56,6 +56,8 @@ def kernel_matrix(X, sigma=1):
     blocks = [list(x) for x in K]
     return np.block(blocks)
 
+def unit(vector):
+    return vector / np.linalg.norm(vector)
 
 class VectorValuedKRR(KRR):
 
@@ -84,17 +86,24 @@ class VectorValuedKRR(KRR):
         results = predict(x)
         return np.array(results) * self.stdevs + self.means
 
-    def score(self, x, y):
+    def score(self, x, y, angle=False):
         yhat = self.predict(x)
-        return -np.mean(np.sum(np.abs(y - yhat), axis=1))
+        error = np.linalg.norm(y - yhat, axis=1)**2
+        if not angle:
+            return np.mean(error)
+        angle = []
+        for i in range(y.shape[0]):
+            angle.append( np.arccos(np.clip(unit(yhat[i]) @ unit(y[i]), -1.0, 1.0)) )
+        angle = np.array(angle)
+        return np.mean(error), np.mean(angle)
 
 
 sigma_choices = list(np.linspace(0.25, 2, 8))
 lambda_choices = [1e-5]#, 1e-4, 1e-3, 1e-2, 1]
-parameters = {'sigma': sigma_choices, 'lamb': lambda_choices}
+parameters = {'sigma': sigma_choices}#, 'lamb': lambda_choices}
 data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
 test = slice(20000, 20100)
-errors = []
+errors, angles = [], []
 
 from time import time
 
@@ -110,14 +119,22 @@ for size in data_subset_sizes:
     print(f'best params: {best_params}')
     best_model = VectorValuedKRR(**best_params)
     best_model.fit(X[:size], y[:size])
-    best_test_error = -best_model.score(X[test], y[test]).item()
+    best_test_error, angle = (result.item() for result in best_model.score(X[test], y[test], angle=True))
     best_model.save()
     print(f'best test error: {best_test_error}')
+    print(f'best mean angle: {angle}')
 
     errors.append(best_test_error)
+    angles.append(angle)
     taken = time() - start
     print(f'time taken: {taken}', end='\n\n')
 
-data = pd.DataFrame({'samples trained on': data_subset_sizes, 'mean absolute error': errors})
-sns.pointplot(x='samples trained on', y='mean absolute error', data=data, s=100)
-plt.savefig('newer_learning_curve.png')
+data = pd.DataFrame({'samples trained on': data_subset_sizes, 'mean squared error norm': errors, 'mean angle': angles})
+fig, ax = plt.subplots()
+ax2 = ax.twinx()
+sns.pointplot(x='samples trained on', y='mean squared error norm', data=data, s=100, ax=ax, color='royalblue')
+sns.pointplot(x='samples trained on', y='mean angle', data=data, s=100, ax=ax2, color='coral')
+
+
+
+plt.savefig('learning_curve.png')
