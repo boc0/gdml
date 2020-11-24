@@ -28,7 +28,7 @@ def symmetric(H):
     return sym
 
 @jit
-def kernel(x, x_, sigma=1.0):
+def kernel_explicit(x, x_, sigma=1.0):
     N, D = x.shape
 
     Dx, Dx_ = descriptor(x), descriptor(x_)
@@ -80,9 +80,21 @@ def kernel(x, x_, sigma=1.0):
     return K
 
 
+def kernel_jax(x, x_, sigma=1.0):
+    _gaussian = partial(gaussian, x, sigma=sigma)   # _gaussian: x' -> k(x, x')
+    hess = hessian(_gaussian)                       # hess: hessian of _gaussian
+    H = hess(x_)                                    
+    K = np.zeros((3,3))
+    for i in range(4):
+        for j in range(4):
+            new = H[i, :, j, :]                    # new = Hess_ij
+            K += new                               # K = sum_ij^N Hess_ij
+    return K
+
+
 
 @jit
-def kernel_matrix(X, sigma=1):
+def kernel_matrix(X, sigma=1, kernel=kernel_explicit):
     _kernel = partial(kernel, sigma=sigma)
     @vmap
     def _kernels(x):
@@ -97,6 +109,9 @@ def unit(vector):
     return vector / np.linalg.norm(vector)
 
 class VectorValuedKRR(KRR):
+    def __init__(self, kernel='explicit', lamb=1e-5, sigma=1.0):
+        super().__init__(lamb=lamb, sigma=sigma)
+        self.kernel = kernel_explicit if kernel == 'explicit' else kernel_jax
 
     def fit(self, X, y):
         self.X = X
@@ -110,27 +125,9 @@ class VectorValuedKRR(KRR):
         alphas = np.linalg.solve(K, y)
         self.alphas = alphas.reshape(samples, 3)
 
-        '''
-        def contribution(i, x):
-            return kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
-        @jit
-        @vmap
-        def _predict(x):
-            indices = np.arange(self.samples)
-            _contribution = vmap(partial(contribution, x=x))
-            contributions = _contribution(indices)
-            mu = np.sum(contributions, axis=0)
-            return mu
-        self._predict = _predict
-        '''
-
     def predict(self, x):
-        '''
-        results = self._predict(x)
-        return np.array(results) * self.stdevs + self.means
-        '''
         def contribution(i, x):
-            return kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
+            return self.kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
         @vmap
         def predict(x):
             indices = np.arange(self.samples)
