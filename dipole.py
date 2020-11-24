@@ -110,7 +110,25 @@ class VectorValuedKRR(KRR):
         alphas = np.linalg.solve(K, y)
         self.alphas = alphas.reshape(samples, 3)
 
+        '''
+        def contribution(i, x):
+            return kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
+        @jit
+        @vmap
+        def _predict(x):
+            indices = np.arange(self.samples)
+            _contribution = vmap(partial(contribution, x=x))
+            contributions = _contribution(indices)
+            mu = np.sum(contributions, axis=0)
+            return mu
+        self._predict = _predict
+        '''
+
     def predict(self, x):
+        '''
+        results = self._predict(x)
+        return np.array(results) * self.stdevs + self.means
+        '''
         def contribution(i, x):
             return kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
         @vmap
@@ -122,6 +140,7 @@ class VectorValuedKRR(KRR):
             return mu
         results = predict(x)
         return np.array(results) * self.stdevs + self.means
+
 
     def score(self, x, y, angle=False):
         yhat = self.predict(x)
@@ -139,49 +158,44 @@ if __name__ == '__main__':
     X = np.array(data['R'])
     y = np.array(data['D'])
 
-
-    sigma_choices = list(np.linspace(1000, 10000, 10))
-    lambda_choices = [1e-5, 1e-2]
+    sigma_choices = list(np.linspace(1000, 6000, 6)) + [10000.0]
+    lambda_choices = [3e-5, 1e-5, 3e-4, 1e-4, 3e-3, 1e-3]
     parameters = {'sigma': sigma_choices, 'lamb': lambda_choices}
     data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
     test = slice(20000, 20100)
+    Xtest, ytest = X[test], y[test]
     errors, angles = [], []
     M = X.shape[0]
 
     all_indices = onp.random.choice(M, size=data_subset_sizes[-1], replace=False)
+    X, y = X[all_indices], y[all_indices]
 
     from time import time
 
     for size in data_subset_sizes:    
         start = time()
         print(f'size: {size}')
-        errors_this_size, angles_this_size = [], []
 
-        for _ in range(3):
-            indices = onp.random.choice(all_indices, size=size, replace=False)
-            Xtrain, ytrain = X[indices], y[indices]
+        indices = onp.random.choice(all_indices, size=size, replace=False)
+        Xtrain, ytrain = X[indices], y[indices]
 
-            cross_validation = GridSearchCV(VectorValuedKRR(), parameters)
-            cross_validation.fit(Xtrain, ytrain)
-            results = cross_validation.cv_results_
-            best = np.argmin(results['rank_test_score'])
-            best_params = results['params'][best]
-            print(f'best params: {best_params}')
-            best_model = VectorValuedKRR(**best_params)
-            best_model.fit(Xtrain, ytrain)
-            best_test_error, angle = (result.item() for result in best_model.score(X[test], y[test], angle=True))
-            errors_this_size.append(best_test_error)
-            angles_this_size.append(angle)
+        cross_validation = GridSearchCV(VectorValuedKRR(), parameters)
+        cross_validation.fit(Xtrain, ytrain)
+        results = cross_validation.cv_results_
+        best = np.argmin(results['rank_test_score'])
+        best_params = results['params'][best]
+        print(f'best params: {best_params}')
+        best_model = VectorValuedKRR(**best_params)
+        best_model.fit(Xtrain, ytrain)
+        best_test_error, angle = (result.item() for result in best_model.score(Xtest, ytest, angle=True))
+        print(f'test error: {best_test_error}')
+        print(f'mean angle: {angle}')
 
-            best_model.save()
-        
-        best_test_error = onp.mean(errors_this_size)
-        print(f'best test error: {best_test_error}')
-        angle = onp.mean(angles_this_size)
-        print(f'best mean angle: {angle}')
+        best_model.save()
 
         errors.append(best_test_error)
         angles.append(angle)
+
         taken = time() - start
         print(f'time taken: {taken}', end='\n\n')
 
