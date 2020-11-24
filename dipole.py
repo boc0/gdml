@@ -148,17 +148,17 @@ if __name__ == '__main__':
     errors, angles = [], []
     M = X.shape[0]
 
+    all_indices = onp.random.choice(M, size=data_subset_sizes[-1], replace=False)
+
     from time import time
 
     for size in data_subset_sizes:    
         start = time()
         print(f'size: {size}')
-
         errors_this_size, angles_this_size = [], []
 
-        for _ in range(5):
-
-            indices = onp.random.choice(M, size=size, replace=False)
+        for _ in range(3):
+            indices = onp.random.choice(all_indices, size=size, replace=False)
             Xtrain, ytrain = X[indices], y[indices]
 
             cross_validation = GridSearchCV(VectorValuedKRR(), parameters)
@@ -172,12 +172,12 @@ if __name__ == '__main__':
             best_test_error, angle = (result.item() for result in best_model.score(X[test], y[test], angle=True))
             errors_this_size.append(best_test_error)
             angles_this_size.append(angle)
-            if best_test_error <= onp.min(errors_this_size):
-                best_model.save()
+
+            best_model.save()
         
-        best_test_error = onp.min(errors_this_size)
+        best_test_error = onp.mean(errors_this_size)
         print(f'best test error: {best_test_error}')
-        angle = onp.min(angles_this_size)
+        angle = onp.mean(angles_this_size)
         print(f'best mean angle: {angle}')
 
         errors.append(best_test_error)
