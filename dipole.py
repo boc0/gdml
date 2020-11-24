@@ -209,4 +209,4 @@ if __name__ == '__main__':
     ax2 = ax.twinx()
     sns.pointplot(x='samples trained on', y='mean squared error norm', data=data, s=100, ax=ax, color='royalblue')
     sns.pointplot(x='samples trained on', y='mean angle', data=data, s=100, ax=ax2, color='coral')
-    plt.savefig('fake_learning_curve.png')
+    plt.savefig(f'learning_curve_{default_kernel}.png')
