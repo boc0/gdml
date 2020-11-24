@@ -92,9 +92,16 @@ def kernel_jax(x, x_, sigma=1.0):
     return K
 
 
+import sys
+default_kernel = 'explicit'
+if len(sys.argv) > 1:
+    default_kernel = sys.argv[1]
 
-@jit
-def kernel_matrix(X, sigma=1, kernel=kernel_explicit):
+print('Using', default_kernel, 'kernel')
+kernel = kernel_explicit if default_kernel == 'explicit' else kernel_jax
+
+
+def kernel_matrix(X, sigma=1):
     _kernel = partial(kernel, sigma=sigma)
     @vmap
     def _kernels(x):
@@ -108,10 +115,12 @@ def kernel_matrix(X, sigma=1, kernel=kernel_explicit):
 def unit(vector):
     return vector / np.linalg.norm(vector)
 
+
 class VectorValuedKRR(KRR):
-    def __init__(self, kernel='explicit', lamb=1e-5, sigma=1.0):
+    def __init__(self, lamb=1e-5, sigma=1.0):
         super().__init__(lamb=lamb, sigma=sigma)
-        self.kernel = kernel_explicit if kernel == 'explicit' else kernel_jax
+        self.kernel = kernel
+
 
     def fit(self, X, y):
         self.X = X
@@ -127,7 +136,7 @@ class VectorValuedKRR(KRR):
 
     def predict(self, x):
         def contribution(i, x):
-            return self.kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
+            return kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
         @vmap
         def predict(x):
             indices = np.arange(self.samples)
@@ -200,4 +209,4 @@ if __name__ == '__main__':
     ax2 = ax.twinx()
     sns.pointplot(x='samples trained on', y='mean squared error norm', data=data, s=100, ax=ax, color='royalblue')
     sns.pointplot(x='samples trained on', y='mean angle', data=data, s=100, ax=ax2, color='coral')
-    plt.savefig('learning_curve_subsets.png')
+    plt.savefig('fake_learning_curve.png')
