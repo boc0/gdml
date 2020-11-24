@@ -176,8 +176,8 @@ if __name__ == '__main__':
         start = time()
         print(f'size: {size}')
 
-        indices = onp.random.choice(all_indices, size=size, replace=False)
-        Xtrain, ytrain = X[indices], y[indices]
+        # indices = onp.random.choice(all_indices, size=size, replace=False)
+        Xtrain, ytrain = X[:size], y[:size]
 
         cross_validation = GridSearchCV(VectorValuedKRR(), parameters)
         cross_validation.fit(Xtrain, ytrain)
@@ -188,13 +188,12 @@ if __name__ == '__main__':
         best_model = VectorValuedKRR(**best_params)
         best_model.fit(Xtrain, ytrain)
         best_test_error, angle = (result.item() for result in best_model.score(Xtest, ytest, angle=True))
+        errors.append(best_test_error)
+        angles.append(angle)
         print(f'test error: {best_test_error}')
         print(f'mean angle: {angle}')
 
         best_model.save()
-
-        errors.append(best_test_error)
-        angles.append(angle)
 
         taken = time() - start
         print(f'time taken: {taken}', end='\n\n')
@@ -204,4 +203,4 @@ if __name__ == '__main__':
     ax2 = ax.twinx()
     sns.pointplot(x='samples trained on', y='mean squared error norm', data=data, s=100, ax=ax, color='royalblue')
     sns.pointplot(x='samples trained on', y='mean angle', data=data, s=100, ax=ax2, color='coral')
-    plt.savefig('learning_curve.png')
+    plt.savefig('learning_curve_subsets.png')
