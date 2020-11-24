@@ -14,12 +14,13 @@ X = np.array(data['R'])
 y = np.array(data['D'])
 
 M = X.shape[0]
-for _ in range(10):
+for _ in range(3):
     start = time()
     indices = onp.random.choice(M, size=SIZE, replace=False)
 
-    sigma_choices = [1.0, 10.0, 100.0, 500.0] + list(np.linspace(1000, 10000, 10))
-    parameters = {'sigma': sigma_choices}
+    sigma_choices = [1000.0]
+    lambda_choices = [1e-10, 1e-5, 1e-2, 1, 10, 100]
+    parameters = {'sigma': sigma_choices, 'lamb': lambda_choices}
 
     Xtrain, ytrain = X[indices], y[indices]
 
