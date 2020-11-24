@@ -15,11 +15,6 @@ from sklearn.model_selection import GridSearchCV
 from utils import KRR, gaussian, fill_diagonal, descriptor
 
 
-data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
-X = np.array(data['R'])
-y = np.array(data['D'])
-
-
 def hessian(f):
     return jacfwd(jacrev(f))
 
@@ -117,7 +112,7 @@ class VectorValuedKRR(KRR):
 
     def predict(self, x):
         def contribution(i, x):
-            return kernel(x, X[i], sigma=self.sigma) @ self.alphas[i]
+            return kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
         @vmap
         def predict(x):
             indices = np.arange(self.samples)
@@ -139,46 +134,60 @@ class VectorValuedKRR(KRR):
         angle = np.array(angle)
         return np.mean(error), np.mean(angle)
 
+if __name__ == '__main__':
+    data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
+    X = np.array(data['R'])
+    y = np.array(data['D'])
 
 
-sigma_choices = list(np.linspace(0.25, 2, 8))
-lambda_choices = [1e-5]#, 1e-4, 1e-3, 1e-2, 1]
-parameters = {'sigma': sigma_choices}#, 'lamb': lambda_choices}
-data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
-test = slice(20000, 20100)
-errors, angles = [], []
-M = X.shape[0]
+    sigma_choices = list(np.linspace(1000, 10000, 10))
+    lambda_choices = [1e-5, 1e-2]
+    parameters = {'sigma': sigma_choices, 'lamb': lambda_choices}
+    data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
+    test = slice(20000, 20100)
+    errors, angles = [], []
+    M = X.shape[0]
 
-from time import time
+    from time import time
 
-for size in data_subset_sizes:
-    start = time()
-    print(f'size: {size}')
+    for size in data_subset_sizes:    
+        start = time()
+        print(f'size: {size}')
 
-    indices = onp.random.choice(M, size=size, replace=False)
-    Xtrain, ytrain = X[indices], y[indices]
+        errors_this_size, angles_this_size = [], []
 
-    cross_validation = GridSearchCV(VectorValuedKRR(), parameters)
-    cross_validation.fit(X[:size], y[:size])
-    results = cross_validation.cv_results_
-    best = np.argmin(results['rank_test_score'])
-    best_params = results['params'][best]
-    print(f'best params: {best_params}')
-    best_model = VectorValuedKRR(**best_params)
-    best_model.fit(X[:size], y[:size])
-    best_test_error, angle = (result.item() for result in best_model.score(X[test], y[test], angle=True))
-    best_model.save()
-    print(f'best test error: {best_test_error}')
-    print(f'best mean angle: {angle}')
+        for _ in range(5):
 
-    errors.append(best_test_error)
-    angles.append(angle)
-    taken = time() - start
-    print(f'time taken: {taken}', end='\n\n')
+            indices = onp.random.choice(M, size=size, replace=False)
+            Xtrain, ytrain = X[indices], y[indices]
 
-data = pd.DataFrame({'samples trained on': data_subset_sizes, 'mean squared error norm': errors, 'mean angle': angles})
-fig, ax = plt.subplots()
-ax2 = ax.twinx()
-sns.pointplot(x='samples trained on', y='mean squared error norm', data=data, s=100, ax=ax, color='royalblue')
-sns.pointplot(x='samples trained on', y='mean angle', data=data, s=100, ax=ax2, color='coral')
-plt.savefig('learning_curve.png')
+            cross_validation = GridSearchCV(VectorValuedKRR(), parameters)
+            cross_validation.fit(Xtrain, ytrain)
+            results = cross_validation.cv_results_
+            best = np.argmin(results['rank_test_score'])
+            best_params = results['params'][best]
+            print(f'best params: {best_params}')
+            best_model = VectorValuedKRR(**best_params)
+            best_model.fit(Xtrain, ytrain)
+            best_test_error, angle = (result.item() for result in best_model.score(X[test], y[test], angle=True))
+            errors_this_size.append(best_test_error)
+            angles_this_size.append(angle)
+            if best_test_error <= onp.min(errors_this_size):
+                best_model.save()
+        
+        best_test_error = onp.min(errors_this_size)
+        print(f'best test error: {best_test_error}')
+        angle = onp.min(angles_this_size)
+        print(f'best mean angle: {angle}')
+
+        errors.append(best_test_error)
+        angles.append(angle)
+        taken = time() - start
+        print(f'time taken: {taken}', end='\n\n')
+
+    data = pd.DataFrame({'samples trained on': data_subset_sizes, 'mean squared error norm': errors, 'mean angle': angles})
+    fig, ax = plt.subplots()
+    ax2 = ax.twinx()
+    sns.pointplot(x='samples trained on', y='mean squared error norm', data=data, s=100, ax=ax, color='royalblue')
+    sns.pointplot(x='samples trained on', y='mean angle', data=data, s=100, ax=ax2, color='coral')
+    plt.savefig('learning_curve.png')
