@@ -1,7 +1,7 @@
 from sklearn.base import BaseEstimator
 import jax.ops
 import jax.numpy as np
-from jax import jit
+from jax import jit, custom_transforms, defjvp
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -56,6 +56,29 @@ def gaussian(x, x_, sigma=1):
     d, d_ = descriptor(x), descriptor(x_)
     sq_distance = np.sum((d - d_)**2)
     return 1 / np.sqrt(2 * np.pi * sigma**2) * np.exp(-sq_distance / sigma**2)
+
+def binom(n, k):
+    return factorial(n) / (factorial(k) * factorial(n - k))
+
+@custom_transforms
+def safe_sqrt(x):
+  return np.sqrt(x)
+defjvp(safe_sqrt, lambda g, ans, x: 0.5 * g / np.where(x > 0, ans, np.inf) )
+
+def matern(x, x_, sigma=1.0, n=2):
+    v = n + 0.5
+    dx, dx_ = descriptor(x), descriptor(x_)
+    d = safe_sqrt(np.sum((dx - dx_)**2))
+    d_scaled = np.sqrt(2 * v) * d / sigma
+    # _binom = vmap(partial(binom, n))
+
+    B = np.exp(- d_scaled)
+    k = np.arange(n)
+    # Pn = np.sum(_factorial(n + k) * _binom(k) * (2 * d_scaled)**(n-k)) / factorial(2*n)
+    # as list of scalars: sum([factorial(n + k) / factorial(2*n) * binom(n, k) * (2 * d_scaled)**(n-k) for k in range(n)])
+    Pn = sum([factorial(n + k) / factorial(2*n) * binom(n, k) * (2 * d_scaled)**(n-k) for k in range(n)])
+
+    return B * Pn
 
 def matrix_heatmap(matrix, **kwargs):
     ax = sns.heatmap(matrix, xticklabels=False, yticklabels=False, **kwargs)
