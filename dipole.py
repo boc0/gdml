@@ -3,8 +3,10 @@ from functools import partial
 import pandas as pd
 import numpy as onp
 
-import jax.numpy as np
 from jax import jit, vmap, jacfwd, jacrev
+import jax.numpy as np
+from jax.numpy import sqrt, exp
+from jax.ops import index, index_update
 import jax
 
 import seaborn as sns
@@ -12,7 +14,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.model_selection import GridSearchCV
 
-from utils import KRR, gaussian, fill_diagonal, descriptor
+from utils import KRR, gaussian, matern, binom, safe_sqrt, fill_diagonal, descriptor
 
 
 def hessian(f):
@@ -27,6 +29,71 @@ def symmetric(H):
     sym = np.allclose(H, H.T)
     return sym
 
+from math import factorial
+
+
+def kernel_matern_explicit(x, x_, sigma=1.0, n=2):
+    v = n + 1/2
+    N, D = x.shape
+
+    Dx, Dx_ = descriptor(x), descriptor(x_)
+    diff = x - x_
+    d = safe_sqrt(np.sum((Dx - Dx_)**2))
+    d_scaled = np.sqrt(2 * v) * d / sigma
+    B = np.exp(- d_scaled)
+    Pn = sum([factorial(n + k) / factorial(2*n) * binom(n, k) * (2 * d_scaled)**(n-k) for k in range(n)])
+
+    eye = np.eye(N)
+    def kron(i, j):
+        return eye[i, j]
+
+    def delta_p(q, i):
+        return sum([factorial(n + k) / factorial(2*n) * binom(n, k) * \
+                    (n - k) * (x[q, i] - x_[q, i]) / d**2 * (2**(sqrt(2)) * sqrt(v) * d / sigma)**(n-k)
+                    for k in range(n)])
+
+    def delta_b(q, i):
+        return sqrt(2*v) * (x[q, i] - x_[q, i]) / (sigma * d) * exp(-d_scaled)
+
+    def delta2p(q, i, p, j):
+        return sum([factorial(n + k) / factorial(2*n) * binom(n, k) * \
+                    (n - k - 2) * (n - k) * diff[q, i] * diff[p, j] / d**4 * (2**(sqrt(2)) * sqrt(v) * d / sigma)**(n-k) \
+                    + kron(i, j) * factorial(n + k) / factorial(2*n) * binom(n, k) * (n - k) / d**2 * (2 * d_scaled)**(n-k)
+                    for k in range(n)])
+
+    def delta2b(q, i, p, j):
+        return sqrt(2*v) * diff[q, i] * diff[p, j] * (sqrt(2*v) * d + sigma) / (sigma**2 * d**3) * exp(-d_scaled) \
+               + kron(i, j) * sqrt(2*v) / (sigma*d) * exp(-d_scaled)
+
+    def hess(q, p, i, j):
+        return B * delta2p(q, i, p, j) + \
+               delta_b(q, i) * delta_p(p, j) + \
+               delta_b(p, j) * delta_p(q, i) + \
+               Pn * delta2b(q, i, p, j)
+
+
+    K = np.zeros((D, D))
+    for p in range(D):
+        for q in range(D):
+            for i in range(N):
+                for j in range(N):
+                    K = index_update(K, index[p, q], K[p, q] + hess(q, p, i, j))
+                    # K[i, j] += hess(q, p, i, j)
+    # K = np.array(K)
+    K = (K + K.T) / 2
+    return K
+
+    rangeD = np.arange(D)
+    rangeN = np.arange(N)
+
+    def kernel_pq(q, p):
+        _hess = partial(hess, q, p)
+        sums = vmap(vmap(_hess, (0, None)), (None, 0))(rangeN, rangeN)
+        return np.sum(sums)
+
+    K = vmap(vmap(kernel_pq, (0, None)), (None, 0))(rangeD, rangeD)
+    K = (K + K.T) / 2
+    return K
 @jit
 def kernel_explicit(x, x_, sigma=1.0):
     N, D = x.shape
