@@ -148,14 +148,15 @@ def kernel_explicit(x, x_, sigma=1.0):
 
 
 def kernel_jax(x, x_, sigma=1.0):
-    _gaussian = partial(gaussian, x, sigma=sigma)   # _gaussian: x' -> k(x, x')
-    hess = hessian(_gaussian)                       # hess: hessian of _gaussian
-    H = hess(x_)                                    
+    _matern = partial(matern, x, sigma=sigma)   # _gaussian: x' -> k(x, x')
+    hess = hessian(_matern)                       # hess: hessian of _gaussian
+    H = hess(x_)
     K = np.zeros((3,3))
     for i in range(4):
         for j in range(4):
             new = H[i, :, j, :]                    # new = Hess_ij
             K += new                               # K = sum_ij^N Hess_ij
+    K = (K + K.T) / 2
     return K
 
 
