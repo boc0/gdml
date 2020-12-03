@@ -1,3 +1,5 @@
+from math import factorial
+
 from sklearn.base import BaseEstimator
 import jax.ops
 import jax.numpy as np
@@ -73,13 +75,12 @@ def matern(x, x_, sigma=1.0, n=2):
     # _binom = vmap(partial(binom, n))
 
     B = np.exp(- d_scaled)
-    k = np.arange(n)
     # Pn = np.sum(_factorial(n + k) * _binom(k) * (2 * d_scaled)**(n-k)) / factorial(2*n)
-    # as list of scalars: sum([factorial(n + k) / factorial(2*n) * binom(n, k) * (2 * d_scaled)**(n-k) for k in range(n)])
     Pn = sum([factorial(n + k) / factorial(2*n) * binom(n, k) * (2 * d_scaled)**(n-k) for k in range(n)])
 
     return B * Pn
 
 def matrix_heatmap(matrix, **kwargs):
+    sns.set(rc={'figure.figsize':(8,6)})
     ax = sns.heatmap(matrix, xticklabels=False, yticklabels=False, **kwargs)
     plt.show()
