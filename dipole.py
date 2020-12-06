@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.model_selection import GridSearchCV
 
-from utils import KRR, gaussian, matern, binom, safe_sqrt, fill_diagonal, descriptor
+from utils import KRR, gaussian, matern, binom, safe_sqrt, fill_diagonal, coulomb
 
 
 def hessian(f):
@@ -34,7 +34,7 @@ def kernel_matern_explicit(x, x_, sigma=1.0, n=2):
     v = n + 1/2
     N, D = x.shape
 
-    Dx, Dx_ = descriptor(x), descriptor(x_)
+    Dx, Dx_ = coulomb(x), coulomb(x_)
     diff = x - x_
     d = safe_sqrt(np.sum((Dx - Dx_)**2))
     d_scaled = np.sqrt(2 * v) * d / sigma
@@ -97,7 +97,7 @@ def kernel_matern_explicit(x, x_, sigma=1.0, n=2):
 def kernel_gauss_explicit(x, x_, sigma=1.0):
     N, D = x.shape
 
-    Dx, Dx_ = descriptor(x), descriptor(x_)
+    Dx, Dx_ = coulomb(x), coulomb(x_)
     D_difference = Dx - Dx_
     k_x = gaussian(x, x_)
 
