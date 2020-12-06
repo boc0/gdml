@@ -9,3 +9,5 @@ notes.py
 .idea
 .vscode
 venv
+model*
+*.csv
