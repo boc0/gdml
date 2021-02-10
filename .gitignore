@@ -1,7 +1,7 @@
 data
 *.pdf
 .DS_Store
-*checkpoint.ipynb
+.ipynb_checkpoints
 *.pyc
 images/*.pdf
 models
@@ -11,3 +11,5 @@ notes.py
 venv
 model*
 *.csv
+bonus
+mlruns
