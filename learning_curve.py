@@ -1,4 +1,5 @@
 from time import time
+import argparse
 
 import mlflow
 import pandas as pd
@@ -8,6 +9,8 @@ from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
 
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+from IPython import embed
 
 from dipole import VectorValuedKRR, train
 
@@ -26,7 +29,7 @@ def cv_instance(kind='grid'):
         raise ValueError(f'Unrecognized kind of Cross-Validation: {kind}')
 
 
-def learning_curve(cv='grid', randomize=False):
+def learning_curve(cv='grid', shuffle=False):
     mlflow.sklearn.autolog()
 
     data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
@@ -44,7 +47,7 @@ def learning_curve(cv='grid', randomize=False):
     mask[test_indices] = False
     X, y = X[mask], y[mask]
 
-    if randomize:
+    if shuffle:
         train_indices = onp.random.choice(M-100, size=data_subset_sizes[-1], replace=False)
         X, y = X[train_indices], y[train_indices]
 
@@ -67,3 +70,14 @@ def learning_curve(cv='grid', randomize=False):
 
         run_id = run.info.run_id
     return run_id
+
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--cv', default='random', help='kind of cross-validation, one of {grid. random}', type=str)
+    parser.add_argument('-s', '--shuffle', default=False, help='whether to shuffle training samples', type=bool)
+    args = parser.parse_args()
+
+    run_id = learning_curve(cv=args.cv, shuffle=args.shuffle)
+    embed()
