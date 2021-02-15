@@ -4,6 +4,7 @@ import argparse
 import mlflow
 import pandas as pd
 import numpy as onp
+onp.random.seed(0)
 import jax.numpy as np
 from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
 
@@ -24,7 +25,7 @@ def cv_instance(kind='grid'):
     if kind == 'grid':
         return GridSearchCV(VectorValuedKRR(), parameters_grid, verbose=True)
     elif kind == 'random':
-        return RandomizedSearchCV(VectorValuedKRR(), parameters_random, n_iter=200, verbose=True, random_state=0)
+        return RandomizedSearchCV(VectorValuedKRR(), parameters_random, n_iter=400, verbose=True, random_state=0)
     else:
         raise ValueError(f'Unrecognized kind of Cross-Validation: {kind}')
 
