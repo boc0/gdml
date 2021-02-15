@@ -4,7 +4,6 @@ import argparse
 import mlflow
 import pandas as pd
 import numpy as onp
-onp.random.seed(0)
 import jax.numpy as np
 from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
 
@@ -19,6 +18,10 @@ from sklearn.utils.fixes import loguniform
 
 parameters_random = {'sigma': loguniform(10**1, 10**5), 'lamb': loguniform(10**-2, 10**3)}
 parameters_grid = {'sigma': list(np.logspace(1, 4, 19)), 'lamb': list(np.logspace(-2, 3, 21))}
+
+
+mlflow.set_experiment("learning curve")
+onp.random.seed(0)
 
 
 def cv_instance(kind='grid'):
