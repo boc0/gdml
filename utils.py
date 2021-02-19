@@ -1,5 +1,6 @@
 from math import factorial
 
+import numpy as onp
 from sklearn.base import BaseEstimator
 import jax.ops
 import jax.numpy as np
@@ -43,6 +44,7 @@ class KRR(BaseEstimator):
 def fill_diagonal(a, value):
     return jax.ops.index_update(a, np.diag_indices(a.shape[0]), value)
 
+
 @jit
 def coulomb(x):
     distances = np.sum((x[:, None, :] - x[None, :, :])**2, axis=-1)
@@ -53,19 +55,23 @@ def coulomb(x):
     D = fill_diagonal(D, 0)
     return D.flatten()
 
+
 @jit
 def gaussian(x, x_, sigma=1, descriptor=coulomb):
     d, d_ = descriptor(x), descriptor(x_)
     sq_distance = np.sum((d - d_)**2)
     return 1 / np.sqrt(2 * np.pi * sigma**2) * np.exp(-sq_distance / sigma**2)
 
+
 def binom(n, k):
     return factorial(n) / (factorial(k) * factorial(n - k))
+
 
 @custom_transforms
 def safe_sqrt(x):
   return np.sqrt(x)
 defjvp(safe_sqrt, lambda g, ans, x: 0.5 * g / np.where(x > 0, ans, np.inf) )
+
 
 def matern(x, x_, sigma=1.0, n=2, descriptor=coulomb):
     v = n + 0.5
@@ -79,6 +85,7 @@ def matern(x, x_, sigma=1.0, n=2, descriptor=coulomb):
     Pn = sum([factorial(n + k) / factorial(2*n) * binom(n, k) * (2 * d_scaled)**(n-k) for k in range(n)])
 
     return B * Pn
+
 
 def matrix_heatmap(matrix, **kwargs):
     sns.set(rc={'figure.figsize':(8,6)})

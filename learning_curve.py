@@ -20,15 +20,14 @@ parameters_random = {'sigma': loguniform(10**1, 10**5), 'lamb': loguniform(10**-
 parameters_grid = {'sigma': list(np.logspace(1, 4, 19)), 'lamb': list(np.logspace(-2, 3, 21))}
 
 
-mlflow.set_experiment("learning curve")
 onp.random.seed(0)
 
 
 def cv_instance(kind='grid'):
     if kind == 'grid':
-        return GridSearchCV(VectorValuedKRR(), parameters_grid, verbose=True)
+        return GridSearchCV(VectorValuedKRR(), parameters_grid)
     elif kind == 'random':
-        return RandomizedSearchCV(VectorValuedKRR(), parameters_random, n_iter=400, verbose=True, random_state=0)
+        return RandomizedSearchCV(VectorValuedKRR(), parameters_random, n_iter=400, random_state=0)
     else:
         raise ValueError(f'Unrecognized kind of Cross-Validation: {kind}')
 
