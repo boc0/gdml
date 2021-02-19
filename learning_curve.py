@@ -34,7 +34,7 @@ def cv_instance(kind='grid'):
 
 
 def learning_curve(cv='grid', shuffle=False):
-    mlflow.sklearn.autolog()
+    # mlflow.sklearn.autolog()
 
     data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
     X = np.array(data['R'])
@@ -71,6 +71,7 @@ def learning_curve(cv='grid', shuffle=False):
         sns.pointplot(x='samples trained on', y='mean angle (orange)', data=data, s=100, ax=ax2, color='coral')
         plt.savefig(f'learning_curve.png')
         mlflow.log_figure(fig, 'learning_curve.png')
+        plt.show()
 
         run_id = run.info.run_id
     return run_id

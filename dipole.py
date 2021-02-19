@@ -17,6 +17,7 @@ from sklearn.metrics import mean_squared_error
 # from sklearn.utils.fixes import loguniform
 
 import mlflow
+import mlflow.sklearn
 
 from utils import KRR, matern, binom, safe_sqrt, fill_diagonal, coulomb
 
@@ -195,6 +196,7 @@ def train(Xtrain, ytrain, Xtest, ytest,
         best = np.argmin(results['rank_test_score'])
         best_params = results['params'][best]
         print(f'best params: {best_params}')
+        mlflow.log_params(best_params)
         best_model = VectorValuedKRR(**best_params)
         best_model.fit(Xtrain, ytrain)
         best_test_error, angle = (result.item() for result in best_model.score(Xtest, ytest, angle=True))
@@ -202,6 +204,8 @@ def train(Xtrain, ytrain, Xtest, ytest,
         print(f'mean angle: {angle}')
         mlflow.log_metric('test error', best_test_error)
         mlflow.log_metric('test angle', angle)
+        mlflow.sklearn.save_model(best_model, f'mlruns/0/{run.info.run_id}/best_model')
+        mlflow.log_metric('time', time() - start)
     print(f'time taken: {time() - start}')
     if return_results:
         return best_test_error, angle, results
