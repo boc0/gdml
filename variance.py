@@ -42,7 +42,10 @@ def variance(size):
             errors.append(error)
             angles.append(angle)
 
-    np.savez(f'variance/{size}.npz', errors=errors, angles=angles, results=results)
+        path = f'{size}.npz'
+        np.savez(path, errors=errors, angles=angles, results=results)
+        mlflow.log_artifact(path)
+
     return errors, angles, results
 
 
