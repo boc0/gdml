@@ -8,19 +8,20 @@ import numpy as onp
 from jax import vmap, jacfwd, jacrev
 import jax.numpy as np
 from jax.numpy import sqrt, exp
+from jax.numpy.linalg import norm
 
 import seaborn as sns
 import matplotlib.pyplot as plt
 
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import mean_squared_error
-# from sklearn.utils.fixes import loguniform
 
 import mlflow
 import mlflow.sklearn
 
 from utils import KRR, matern, binom, safe_sqrt, fill_diagonal, coulomb
 
+from IPython import embed
 
 def hessian(f):
     return jacfwd(jacrev(f))
@@ -169,47 +170,62 @@ class VectorValuedKRR(KRR):
         error = mean_squared_error(yhat, y, squared=False)
         if not angle:
             return -np.mean(error)
-        angle = []
-        for i in range(y.shape[0]):
-            angle.append( np.degrees(np.arccos(np.clip(unit(yhat[i]) @ unit(y[i]), -1.0, 1.0))) )
+        angle = [np.degrees(np.arccos(np.clip(unit(yhat[i]) @ unit(y[i]), -1.0, 1.0)))
+                 for i in range(y.shape[0])]
         angle = np.array(angle)
         return np.mean(error), np.mean(angle)
 
+    def errors(self, X, y):
+        yhat = self.predict(X)
+        angles = np.array([np.degrees(np.arccos(np.clip(unit(yhat[i]) @ unit(y[i]), -1.0, 1.0)))
+                           for i in range(y.shape[0])])
+        magnitudes = norm(yhat, axis=1) - norm(y, axis=1)
+        return angles, magnitudes
 
 # PARAMETERS = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
 sigmas = list(np.logspace(1, 4, 19))
 lambdas = list(np.logspace(-2, 3, 21))
 PARAMETERS = {'sigma': sigmas, 'lamb': lambdas}
 
+
 def train(Xtrain, ytrain, Xtest, ytest,
-          parameters=PARAMETERS,
-          cv=GridSearchCV(VectorValuedKRR(), PARAMETERS),
+          cv=RandomizedSearchCV(VectorValuedKRR(), PARAMETERS, n_iter=400),
           return_results=False):
-          # cv=RandomizedSearchCV(VectorValuedKRR(), PARAMETERS, n_iter=50)):
 
     start = time()
     size = Xtrain.shape[0]
     with mlflow.start_run(nested=True) as run:
         mlflow.log_param('n_samples', size)
+        print(f'\nsize: {size}')
         cv.fit(Xtrain, ytrain)
         results = cv.cv_results_
-        best = np.argmin(results['rank_test_score'])
+        indices = onp.argpartition(results['rank_test_score'], 10)[:10]
+        print('errors:')
+
+        def test(params):
+            model = VectorValuedKRR(**params)
+            model.fit(Xtrain, ytrain)
+            error, angle = (result.item() for result in model.score(Xtest, ytest, angle=True))
+            print(f'{str(params).ljust(60)} {error:.4f} {angle:.2f}')
+            return model, error, angle
+
+        models, errors, angles = zip(*map(test, onp.array(results['params'])[indices]))
+        _best = np.argmin(np.array(errors))
+        best = indices[_best]
         best_params = results['params'][best]
         print(f'best params: {best_params}')
         mlflow.log_params(best_params)
-        best_model = VectorValuedKRR(**best_params)
-        best_model.fit(Xtrain, ytrain)
-        best_test_error, angle = (result.item() for result in best_model.score(Xtest, ytest, angle=True))
-        print(f'test error: {best_test_error}')
+        error, angle = errors[_best], angles[_best]
+        print(f'test error: {error}')
         print(f'mean angle: {angle}')
-        mlflow.log_metric('test error', best_test_error)
+        mlflow.log_metric('test error', error)
         mlflow.log_metric('test angle', angle)
-        mlflow.sklearn.save_model(best_model, f'mlruns/0/{run.info.run_id}/best_model')
-        mlflow.log_metric('time', time() - start)
+        # mlflow.sklearn.save_model(models[_best], f'mlruns/0/{run.info.run_id}/best_model')
+        # mlflow.log_metric('time', time() - start)
     print(f'time taken: {time() - start}')
     if return_results:
-        return best_test_error, angle, results
-    return best_test_error, angle
+        return error, angle, results
+    return error, angle
 
 
 if __name__ == '__main__':

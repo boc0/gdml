@@ -82,6 +82,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--cv', default='random', help='kind of cross-validation, one of {grid. random}', type=str)
     parser.add_argument('-s', '--shuffle', default=False, help='whether to shuffle training samples', type=bool)
     args = parser.parse_args()
+    mlflow.set_experiment('learning curve')
 
     run_id = learning_curve(cv=args.cv, shuffle=args.shuffle)
     embed()
