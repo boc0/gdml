@@ -221,7 +221,7 @@ def train(Xtrain, ytrain, Xtest, ytest,
         mlflow.log_metric('test error', error)
         mlflow.log_metric('test angle', angle)
         # mlflow.sklearn.save_model(models[_best], f'mlruns/0/{run.info.run_id}/best_model')
-        # mlflow.log_metric('time', time() - start)
+        mlflow.log_metric('time', time() - start)
     print(f'time taken: {time() - start}')
     if return_results:
         return error, angle, results

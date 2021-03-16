@@ -27,7 +27,7 @@ def cv_instance(kind='grid'):
     if kind == 'grid':
         return GridSearchCV(VectorValuedKRR(), parameters_grid)
     elif kind == 'random':
-        return RandomizedSearchCV(VectorValuedKRR(), parameters_random, n_iter=400, random_state=0)
+        return RandomizedSearchCV(VectorValuedKRR(), parameters_random, n_iter=40, random_state=0)
     else:
         raise ValueError(f'Unrecognized kind of Cross-Validation: {kind}')
 
