@@ -9,6 +9,7 @@ from jax import vmap, jacfwd, jacrev
 import jax.numpy as np
 from jax.numpy import sqrt, exp
 from jax.numpy.linalg import norm
+from scipy.stats import loguniform
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -133,8 +134,6 @@ def unit(vector):
 class VectorValuedKRR(KRR):
     def __init__(self, lamb=1e-5, sigma=1.0):
         super().__init__(lamb=lamb, sigma=sigma)
-        # self.similarity = similarity
-        # self.kernel = jit(partial(kernel, similarity=similarity))
         self.kernel = kernel_matern_explicit
 
     def fit(self, X, y):
@@ -182,14 +181,14 @@ class VectorValuedKRR(KRR):
         magnitudes = norm(yhat, axis=1) - norm(y, axis=1)
         return angles, magnitudes
 
-# PARAMETERS = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
-sigmas = list(np.logspace(1, 4, 19))
-lambdas = list(np.logspace(-2, 3, 21))
-PARAMETERS = {'sigma': sigmas, 'lamb': lambdas}
+PARAMETERS = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
+# sigmas = list(np.logspace(1, 4, 19))
+# lambdas = list(np.logspace(-2, 3, 21))
+# PARAMETERS = {'sigma': sigmas, 'lamb': lambdas}
 
 
-def train(Xtrain, ytrain, Xtest, ytest,
-          cv=RandomizedSearchCV(VectorValuedKRR(), PARAMETERS, n_iter=400),
+def train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest,
+          cv=RandomizedSearchCV(VectorValuedKRR(), PARAMETERS, n_iter=40),
           return_results=False):
 
     start = time()
@@ -205,7 +204,7 @@ def train(Xtrain, ytrain, Xtest, ytest,
         def test(params):
             model = VectorValuedKRR(**params)
             model.fit(Xtrain, ytrain)
-            error, angle = (result.item() for result in model.score(Xtest, ytest, angle=True))
+            error, angle = (result.item() for result in model.score(Xdev, ydev, angle=True))
             print(f'{str(params).ljust(60)} {error:.4f} {angle:.2f}')
             return model, error, angle
 
@@ -216,6 +215,13 @@ def train(Xtrain, ytrain, Xtest, ytest,
         print(f'best params: {best_params}')
         mlflow.log_params(best_params)
         error, angle = errors[_best], angles[_best]
+        print(f'dev error: {error}')
+        print(f'mean angle: {angle}')
+        mlflow.log_metric('dev error', error)
+        mlflow.log_metric('dev angle', angle)
+        best_model = VectorValuedKRR(**best_params)
+        best_model.fit(Xtrain, ytrain)
+        error, angle = (result.item() for result in best_model.score(Xtest, ytest, angle=True))
         print(f'test error: {error}')
         print(f'mean angle: {angle}')
         mlflow.log_metric('test error', error)
@@ -236,10 +242,6 @@ if __name__ == '__main__':
     y = np.array(data['D'])
     M = X.shape[0]
 
-    # sigmas = list(np.logspace(1, 4, 19))
-    # lambdas = list(np.logspace(-2, 3, 16))
-    # parameters = {'sigma': sigmas, 'lamb': lambdas}
-    # parameters = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
     data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
     test_indices = onp.random.choice(M, size=100, replace=False)
     Xtest, ytest = X[test_indices], y[test_indices]
@@ -266,6 +268,3 @@ if __name__ == '__main__':
         sns.pointplot(x='samples trained on', y='mean angle', data=data, s=100, ax=ax2, color='coral')
         plt.savefig(f'learning_curve.png')
         mlflow.log_figure(fig, 'learning_curve.png')
-
-
-# old_results = results.copy()

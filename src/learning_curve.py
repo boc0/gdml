@@ -40,10 +40,12 @@ def learning_curve(cv='grid', shuffle=False):
     y = np.array(data['D'])
     M = X.shape[0]
 
-    data_subset_sizes = np.linspace(10, 100, 10, dtype=int)
+    data_subset_sizes = np.linspace(5, 25, 5, dtype=int)
 
     test_indices = onp.random.choice(M, size=500, replace=False)
     Xtest, ytest = X[test_indices], y[test_indices]
+    Xdev, Xtest = np.split(X[test_indices], 2)
+    ydev, ytest = np.split(y[test_indices], 2)
 
     # remove test samples from X, y
     mask = onp.ones(M, dtype=bool)
@@ -59,7 +61,7 @@ def learning_curve(cv='grid', shuffle=False):
     with mlflow.start_run() as run:
         for size in data_subset_sizes:
             Xtrain, ytrain = X[:size], y[:size]
-            error, angle = train(Xtrain, ytrain, Xtest, ytest, cv=cv_instance(kind=cv))
+            error, angle = train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest, cv=cv_instance(kind=cv))
             errors.append(error)
             angles.append(angle)
 

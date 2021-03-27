@@ -3,7 +3,7 @@ data
 .DS_Store
 .ipynb_checkpoints
 *.pyc
-images/*.pdf
+images/
 models
 notes.py
 .idea
@@ -12,4 +12,4 @@ venv
 model*
 *.csv
 bonus
-mlruns
+mlruns*
