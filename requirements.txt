@@ -1,2 +1,6 @@
 jax
 jaxlib
+schnetpack
+mlflow
+pandas
+seaborn

@@ -136,14 +136,21 @@ class VectorValuedKRR(KRR):
         super().__init__(lamb=lamb, sigma=sigma)
         self.kernel = kernel_matern_explicit
 
+    @property
+    def stdevs(self):
+        return np.std(self.y)
+
+    @property
+    def means(self):
+        return np.mean(self.y)
+
     def fit(self, X, y):
         self.X = X
+        self.y = y
         samples = X.shape[0]
 
         K = kernel_matrix(X, sigma=self.sigma, kernel=self.kernel)
         K = fill_diagonal(K, K.diagonal() + self.lamb)
-        self.means = np.mean(y)
-        self.stdevs = np.std(y)
         y = (y - self.means) / self.stdevs
         y = y.reshape(samples * 3)
         alphas = np.linalg.solve(K, y)
