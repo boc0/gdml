@@ -33,12 +33,13 @@ class KRR(BaseEstimator):
         return self.X.shape[0]
 
     def save(self):
-        np.savez(f'models/{self.samples}', X=self.X, alphas=self.alphas)
+        np.savez(f'models/{self.samples}', X=self.X, y=self.y, alphas=self.alphas)
 
     def load(self, name):
         data = np.load(f'models/{name}.npz')
-        self.X = data['X']
-        self.alphas = data['alphas']
+        self.X = np.array(data['X'])
+        self.y = np.array(data['y'])
+        self.alphas = np.array(data['alphas'])
 
 
 def fill_diagonal(a, value):
