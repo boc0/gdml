@@ -173,7 +173,7 @@ class VectorValuedKRR(KRR):
     def score(self, x, y, angle=False):
         yhat = self.predict(x)
         # error = np.linalg.norm(y - yhat, axis=1)**2
-        error = mean_squared_error(yhat, y, squared=False)
+        error = mean_squared_error(yhat, y, squared=True)
         if not angle:
             return -np.mean(error)
         angle = [np.degrees(np.arccos(np.clip(unit(yhat[i]) @ unit(y[i]), -1.0, 1.0)))
@@ -212,7 +212,7 @@ def train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest,
             model = VectorValuedKRR(**params)
             model.fit(Xtrain, ytrain)
             error, angle = (result.item() for result in model.score(Xdev, ydev, angle=True))
-            print(f'{str(params).ljust(60)} {error:.4f} {angle:.2f}')
+            # print(f'{str(params).ljust(60)} {error:.4f} {angle:.2f}')
             return model, error, angle
 
         models, errors, angles = zip(*map(test, onp.array(results['params'])[indices]))
