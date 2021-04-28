@@ -5,10 +5,11 @@ from math import factorial
 import pandas as pd
 import numpy as onp
 
-from jax import vmap, jacfwd, jacrev
+from jax import vmap, jacfwd, jacrev, jit
 import jax.numpy as np
 from jax.numpy import sqrt, exp
 from jax.numpy.linalg import norm
+from jax.ops import index_update, index
 from scipy.stats import loguniform
 
 import seaborn as sns
@@ -20,23 +21,14 @@ from sklearn.metrics import mean_squared_error
 import mlflow
 import mlflow.sklearn
 
-from utils import KRR, matern, binom, safe_sqrt, fill_diagonal, coulomb
-
-from IPython import embed
-
-def hessian(f):
-    return jacfwd(jacrev(f))
+from utils import KRR, matern, binom, safe_sqrt, fill_diagonal, coulomb, gaussian
 
 
-def symmetric(matrix):
-    return np.allclose(matrix, matrix.T)
-
-
-def kernel_matern_explicit(x, x_, sigma=1.0, n=2):
+def kernel_matern(x, x_, sigma=1.0, n=2, descriptor=coulomb):
     v = n + 1/2
     N, D = x.shape
 
-    Dx, Dx_ = coulomb(x), coulomb(x_)
+    Dx, Dx_ = descriptor(x), descriptor(x_)
     diff = x - x_
     d = safe_sqrt(np.sum((Dx - Dx_)**2)) + 1e-1
     d_scaled = np.sqrt(2 * v) * d / sigma
@@ -71,20 +63,6 @@ def kernel_matern_explicit(x, x_, sigma=1.0, n=2):
                delta_b(p, j) * delta_p(q, i) + \
                Pn * delta2b(q, i, p, j)
 
-    '''
-    K = np.zeros((D, D))
-    for p in range(D):
-        for q in range(D):
-            for i in range(N):
-                for j in range(N):
-                    K = index_update(K, index[p, q], K[p, q] + hess(q, p, i, j))
-                    # K[p, q] += hess(p, q, i, j)
-                    # K[i, j] += hess(q, p, i, j)
-    # K = np.array(K)
-    # K = (K + K.T) / 2
-    return K
-    '''
-
     rangeD = np.arange(D)
     rangeN = np.arange(N)
 
@@ -98,9 +76,64 @@ def kernel_matern_explicit(x, x_, sigma=1.0, n=2):
     return K
 
 
+def kernel_gauss(x, x_, sigma=1.0, descriptor=coulomb):
+    N, D = x.shape
+
+    Dx, Dx_ = descriptor(x), descriptor(x_)
+    D_difference = Dx - Dx_
+    k_x = gaussian(x, x_)
+
+    eye = np.eye(N)
+    def kronecker(i, j):
+        return eye[i, j]
+
+    def kronecker_sign_factor(k):
+        delta = np.zeros((N, N))
+        delta = index_update(delta, index[k, :], 1)
+        delta = index_update(delta, index[:, k], 1)
+        delta = index_update(delta, index[k, k], 0)
+        return delta.flatten()
+
+    def difference_at(q):
+        return (x[:, None] - x[None, :])[:, :, q].flatten()
+
+    def gamma(q, k):
+        g = -Dx**3 * difference_at(q) * kronecker_sign_factor(k)
+        return g.flatten()
+
+    def delta_gamma(q, k, p, l):
+        dg = (-1 + 2 * kronecker(k, l)) * Dx**3 * (kronecker(p, q) - 3 * difference_at(q) * difference_at(p) * Dx**2)
+        return dg.flatten()
+
+    def phi(q, k):
+        return sigma**(-2) * ( (D_difference) @ gamma(q, k) )
+
+    def delta_phi(q, k, p, l):
+        return sigma**(-2) * ( D_difference @ delta_gamma(q, k, p, l) + gamma(q, k) @ gamma(p, l) )
+
+    def hess(q, p, k, l):
+        return -k_x * ( phi(q, k) * phi(p, l) - delta_phi(q, k, p, l) )
+
+    rangeD = np.arange(D)
+    rangeN = np.arange(N)
+
+    def kernel_pq(q, p):
+        _hess = lambda k, l: -k_x * ( phi(q, k) * phi(p, l) - delta_phi(q, k, p, l) )
+        _hess = partial(hess, q, p)
+        sums = vmap(vmap(_hess, (0, None)), (None, 0))(rangeN, rangeN)
+        return np.sum(sums)
+
+    K = vmap(vmap(kernel_pq, (0, None)), (None, 0))(rangeD, rangeD)
+    K = (K + K.T) / 2
+    return K
+
+
+def hessian(f):
+    return jacfwd(jacrev(f))
+
 
 def kernel(x, x_, sigma=1.0, similarity=matern):
-    _kernel = partial(similarity, x, sigma=sigma)
+    _kernel = partial(similarity, x_, sigma=sigma)
     hess = hessian(_kernel)
     H = hess(x_)
     K = np.sum(H, axis=(0, 2))
@@ -108,23 +141,22 @@ def kernel(x, x_, sigma=1.0, similarity=matern):
     return K
 
 
+kernel_matrix(X[:2], kernel=kernel_matern)
+kernel_matrix(X[:2], kernel=kernel, descriptor=None)
 
-def kernel_matrix(X, sigma=1.0, kernel=kernel):
-    '''
-    if similarity is None:
+
+def kernel_matrix(data, sigma=1.0, kernel=kernel_matern, descriptor=coulomb):
+    if descriptor is None:
         _kernel = partial(kernel, sigma=sigma)
     else:
-        _kernel = partial(kernel, sigma=sigma, similarity=similarity)   # _kernel: kernel ((x, x') -> K^(3x3)) parametrized with sigma
-    '''
-    _kernel = partial(kernel, sigma=sigma)
+        _kernel = partial(kernel, sigma=sigma, descriptor=descriptor)   # _kernel: kernel ((x, x') -> K^(3x3)) parametrized with sigma
     @vmap
     def _kernels(x):
-        vec_kernel = vmap(partial(_kernel, x))          # vec_kernel: (x_1, x_2, ..., x_M) -> (k(x, x_1), k(x, x_2), ..., k(x, x_M))
+        vec_kernel = vmap(partial(_kernel, x_=x))          # vec_kernel: (x_1, x_2, ..., x_M) -> (k(x, x_1), k(x, x_2), ..., k(x, x_M))
         return vec_kernel(X)
-    K = _kernels(X)                                     # K: list of lists of kernels for each 2 data points
+    K = _kernels(data)                                     # K: list of lists of kernels for each 2 data points
     blocks = [list(x) for x in K]
     return np.block(blocks)                             # from list of lists of K(3x3)-matrices to block matrix of K(3x3) matrices
-
 
 
 def unit(vector):
@@ -132,9 +164,8 @@ def unit(vector):
 
 
 class VectorValuedKRR(KRR):
-    def __init__(self, lamb=1e-5, sigma=1.0):
-        super().__init__(lamb=lamb, sigma=sigma)
-        self.kernel = kernel_matern_explicit
+    kernel = kernel_matern
+    descriptor = coulomb
 
     @property
     def stdevs(self):
@@ -149,7 +180,7 @@ class VectorValuedKRR(KRR):
         self.y = y
         samples = X.shape[0]
 
-        K = kernel_matrix(X, sigma=self.sigma, kernel=self.kernel)
+        K = kernel_matrix(X, sigma=self.sigma, kernel=self.__class__.kernel)
         K = fill_diagonal(K, K.diagonal() + self.lamb)
         y = (y - self.means) / self.stdevs
         y = y.reshape(samples * 3)
@@ -158,13 +189,12 @@ class VectorValuedKRR(KRR):
 
     def predict(self, x):
         def contribution(i, x):
-            return self.kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
+            return self.__class__.kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
         @vmap
         def predict(x):
             indices = np.arange(self.samples)
             _contribution = vmap(partial(contribution, x=x))
             contributions = _contribution(indices)
-            # contributions = [contribution(i, x) for i in indices]
             mu = np.sum(contributions, axis=0)
             return mu
         results = predict(x)
@@ -187,6 +217,17 @@ class VectorValuedKRR(KRR):
                            for i in range(y.shape[0])])
         magnitudes = norm(yhat, axis=1) - norm(y, axis=1)
         return angles, magnitudes
+
+
+class KRRGauss(VectorValuedKRR):
+    kernel = kernel_gauss
+
+gau = KRRGauss()
+mat = VectorValuedKRR()
+mat.fit(X[:2], y[:2])
+gau.fit(X[:2], y[:2])
+gau.score(X[:2], y[:2])
+
 
 PARAMETERS = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
 # sigmas = list(np.logspace(1, 4, 19))
@@ -239,6 +280,7 @@ def train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest,
     if return_results:
         return error, angle, results
     return error, angle
+
 
 
 if __name__ == '__main__':

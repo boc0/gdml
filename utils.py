@@ -4,7 +4,9 @@ import numpy as onp
 from sklearn.base import BaseEstimator
 import jax.ops
 import jax.numpy as np
-from jax import jit, custom_transforms, defjvp
+from jax import jit, custom_jvp
+from schnetpack.data import AtomsData
+from schnetpack.environment import SimpleEnvironmentProvider
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -68,10 +70,11 @@ def binom(n, k):
     return factorial(n) / (factorial(k) * factorial(n - k))
 
 
-@custom_transforms
+@jax.custom_jvp
 def safe_sqrt(x):
-  return np.sqrt(x)
-defjvp(safe_sqrt, lambda g, ans, x: 0.5 * g / np.where(x > 0, ans, np.inf) )
+    return np.sqrt(x)
+
+safe_sqrt.defjvp(lambda g, ans, x: 0.5 * g / np.where(x > 0, ans, np.inf))
 
 
 def matern(x, x_, sigma=1.0, n=2, descriptor=coulomb):
@@ -92,3 +95,41 @@ def matrix_heatmap(matrix, **kwargs):
     sns.set(rc={'figure.figsize':(8,6)})
     ax = sns.heatmap(matrix, xticklabels=False, yticklabels=False, **kwargs)
     plt.show()
+
+
+def dev_test(X, y):
+    M = X.shape[0]
+    test_indices = onp.random.choice(M, size=500, replace=False)
+    Xtest, ytest = X[test_indices], y[test_indices]
+    Xdev, Xtest = np.split(X[test_indices], 2)
+    ydev, ytest = np.split(y[test_indices], 2)
+    return Xdev, ydev, Xtest, ytest
+
+
+
+
+class AtomsDataFix(AtomsData):
+    def __init__(
+        self,
+        dbpath,
+        subset=None,
+        available_properties=None,
+        load_only=None,
+        units=None,
+        environment_provider=SimpleEnvironmentProvider(),
+        collect_triples=False,
+        center_positions=True,
+    ):
+
+        self.dbpath = dbpath
+        self.subset = subset
+        self.load_only = load_only
+        self.available_properties = self.get_available_properties(available_properties)
+        if load_only is None:
+            self.load_only = self.available_properties
+        if units is None:
+            units = [1.0] * len(self.available_properties)
+        self.units = dict(zip(self.available_properties, units))
+        self.environment_provider = environment_provider
+        self.collect_triples = collect_triples
+        self.center_positions = center_positions
