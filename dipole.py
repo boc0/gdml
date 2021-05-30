@@ -141,8 +141,6 @@ def kernel(x, x_, sigma=1.0, similarity=matern):
     return K
 
 
-kernel_matrix(X[:2], kernel=kernel_matern)
-kernel_matrix(X[:2], kernel=kernel, descriptor=None)
 
 
 def kernel_matrix(data, sigma=1.0, kernel=kernel_matern, descriptor=coulomb):
@@ -153,7 +151,7 @@ def kernel_matrix(data, sigma=1.0, kernel=kernel_matern, descriptor=coulomb):
     @vmap
     def _kernels(x):
         vec_kernel = vmap(partial(_kernel, x_=x))          # vec_kernel: (x_1, x_2, ..., x_M) -> (k(x, x_1), k(x, x_2), ..., k(x, x_M))
-        return vec_kernel(X)
+        return vec_kernel(data)
     K = _kernels(data)                                     # K: list of lists of kernels for each 2 data points
     blocks = [list(x) for x in K]
     return np.block(blocks)                             # from list of lists of K(3x3)-matrices to block matrix of K(3x3) matrices
@@ -205,7 +203,7 @@ class VectorValuedKRR(KRR):
         # error = np.linalg.norm(y - yhat, axis=1)**2
         error = mean_squared_error(yhat, y, squared=True)
         if not angle:
-            return -np.mean(error)
+            return -onp.mean(error)
         angle = [np.degrees(np.arccos(np.clip(unit(yhat[i]) @ unit(y[i]), -1.0, 1.0)))
                  for i in range(y.shape[0])]
         angle = np.array(angle)
@@ -222,11 +220,6 @@ class VectorValuedKRR(KRR):
 class KRRGauss(VectorValuedKRR):
     kernel = kernel_gauss
 
-gau = KRRGauss()
-mat = VectorValuedKRR()
-mat.fit(X[:2], y[:2])
-gau.fit(X[:2], y[:2])
-gau.score(X[:2], y[:2])
 
 
 PARAMETERS = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
@@ -236,8 +229,9 @@ PARAMETERS = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**
 
 
 def train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest,
-          cv=RandomizedSearchCV(VectorValuedKRR(), PARAMETERS, n_iter=40),
-          return_results=False):
+          cv=RandomizedSearchCV(VectorValuedKRR(), PARAMETERS, n_iter=3),
+          return_results=False,
+          n_best=10):
 
     start = time()
     size = Xtrain.shape[0]
@@ -246,8 +240,8 @@ def train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest,
         print(f'\nsize: {size}')
         cv.fit(Xtrain, ytrain)
         results = cv.cv_results_
-        indices = onp.argpartition(results['rank_test_score'], 10)[:10]
-        print('errors:')
+        indices = onp.argpartition(results['rank_test_score'], n_best)[:n_best]
+        # print('errors:')
 
         def test(params):
             model = VectorValuedKRR(**params)

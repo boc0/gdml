@@ -1,3 +1,4 @@
+import re
 from math import factorial
 
 import numpy as onp
@@ -74,7 +75,7 @@ def binom(n, k):
 def safe_sqrt(x):
     return np.sqrt(x)
 
-safe_sqrt.defjvp(lambda g, ans, x: 0.5 * g / np.where(x > 0, ans, np.inf))
+safe_sqrt.defjvps(lambda g, ans, x: 0.5 * g / np.where(x > 0, ans, np.inf))
 
 
 def matern(x, x_, sigma=1.0, n=2, descriptor=coulomb):
@@ -133,3 +134,15 @@ class AtomsDataFix(AtomsData):
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
         self.center_positions = center_positions
+
+
+def to_snake_case(name: str) -> str:
+    name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
+
+
+class classproperty(object):
+    def __init__(self, f):
+        self.f = f
+    def __get__(self, obj, owner):
+        return self.f(owner)

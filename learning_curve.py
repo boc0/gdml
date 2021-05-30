@@ -40,7 +40,7 @@ def learning_curve(cv='grid', shuffle=False):
     y = np.array(data['D'])
     M = X.shape[0]
 
-    data_subset_sizes = np.linspace(5, 25, 5, dtype=int)
+    data_subset_sizes = np.linspace(5, 25, 5, dtype=np.int32)
 
     test_indices = onp.random.choice(M, size=500, replace=False)
     Xtest, ytest = X[test_indices], y[test_indices]

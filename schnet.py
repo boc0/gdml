@@ -4,6 +4,9 @@ import numpy as onp
 import jax.numpy as np
 import pandas as pd
 import torch
+import schnetpack as spk
+from sklearn.base import BaseEstimator
+from schnetpack.data import AtomsData
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -11,9 +14,6 @@ import seaborn as sns
 from dipole import VectorValuedKRR, train
 from utils import matern, coulomb
 
-import schnetpack as spk
-from ase.db.jsondb import JSONDatabase
-from utils import AtomsDataFix as AtomsData
 
 # loss function
 def squared_error(batch, result):
@@ -23,17 +23,20 @@ def squared_error(batch, result):
     return err_sq.mean().item()
 
 
-def train_schnet(train, val, size=50, n_epochs=50):
+def train_schnet(
+        train, val, size=50, n_epochs=50,
+        # hyperparameters
+        n_atom_basis=128, n_filters=128, n_gaussians=25,
+        n_interactions=6, cutoff=5., cutoff_network=spk.nn.cutoff.CosineCutoff):
 
     train_loader = spk.AtomsLoader(train, batch_size=2048, shuffle=True)
     val_loader = spk.AtomsLoader(val, batch_size=2048)
 
     schnet = spk.representation.SchNet(
-        n_atom_basis=30, n_filters=30, n_gaussians=20, n_interactions=5,
-        cutoff=4., cutoff_network=spk.nn.cutoff.CosineCutoff
+        n_atom_basis=n_atom_basis, n_filters=n_filters, n_gaussians=n_gaussians, n_interactions=n_interactions,
+        cutoff=cutoff, cutoff_network=cutoff_network
     )
-
-    output_alpha = spk.atomistic.DipoleMoment(n_in=30, property='dipole')
+    output_alpha = spk.atomistic.DipoleMoment(n_in=n_atom_basis, property='dipole')
     model = spk.AtomisticModel(representation=schnet, output_modules=output_alpha)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
@@ -50,7 +53,7 @@ def train_schnet(train, val, size=50, n_epochs=50):
         spk.train.CSVHook(f'logs/{size}', metrics=metrics)
     ]
 
-    model_dir = f'model-{size}'
+    model_dir = f'models/model {size} {n_atom_basis} {n_interactions}'
     trainer = spk.train.Trainer(
         model_path=model_dir,
         model=model,
@@ -66,8 +69,57 @@ def train_schnet(train, val, size=50, n_epochs=50):
     return torch.load(os.path.join(model_dir, 'best_model'))
 
 
+def get_xy():
+    data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
+    X = np.array(data['R'])
+    y = np.array(data['D'])
+    return X, y
+
+
+def to_spk_dataset(Xcut, ycut):
+    _, y = get_xy()
+    atomsdb = AtomsData('data/data.db')
+    n_samples = Xcut.shape[0]
+    res = np.array([np.argwhere((y == ycut[i]))[0][0].item() for i in range(n_samples)])
+    return atomsdb.create_subset(res)
+
+
+def to_batch(dataset):
+    return next(iter(spk.AtomsLoader(dataset, batch_size=2048)))
+
+
+
+class SchNet(BaseEstimator):
+    def __init__(self, n_atom_basis=128, n_interactions=6):
+        self.n_atom_basis = n_atom_basis
+        self.n_interactions = n_interactions
+        self.model = None
+
+    def fit(self, Xtrain, ytrain):
+        M = Xtrain.size
+        dev_size = M // 10
+        Xtrain, Xdev = np.split(Xtrain, [dev_size])
+        ytrain, ydev = np.split(ytrain, [dev_size])
+        train = to_spk_dataset(Xtrain, ytrain)
+        dev = to_spk_dataset(Xdev, ydev)
+        self.model = train_schnet(train, dev, size=M,
+            n_atom_basis=self.n_atom_basis,
+            n_interactions=self.n_interactions)
+
+    def predict(self, data):
+        return self.model(data)
+
+    def score(self, inputs, targets):
+        test_batch = to_batch(to_spk_dataset(inputs, targets))
+        pred = self.predict(test_batch)
+        return -squared_error(pred, test_batch)
+
+
+
+
+
 if __name__ == '__main__':
-    data_subset_sizes = list(np.linspace(5, 10, 2, dtype=int))
+    data_subset_sizes = list(np.linspace(10, 100, 10, dtype=int))
 
     data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
     X = np.array(data['R'])
@@ -85,7 +137,6 @@ if __name__ == '__main__':
     test_data = atomsdb.create_subset(list(test_indices))
     val = atomsdb.create_subset(list(dev_indices))
     loader = spk.AtomsLoader(test_data, batch_size=512)
-    batch = next(iter(loader))
 
     test_batch = next(iter(spk.AtomsLoader(test_data, batch_size=2048)))
 
@@ -99,11 +150,9 @@ if __name__ == '__main__':
     errors_gdml, errors_schnet = [], []
 
     for size in data_subset_sizes:
-        size = 100
-        print(f'size: {size}')
-
+        print(size)
         Xtrain, ytrain = X[:size], y[:size]
-        train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest)
+        # train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest, n_best=2)
 
         train = atomsdb.create_subset(train_indices[:size])
         best_model = train_schnet(train, val, size=size)

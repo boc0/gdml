@@ -13,3 +13,4 @@ model*
 *.csv
 bonus
 mlruns*
+learning_curve.png
