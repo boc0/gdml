@@ -4,3 +4,4 @@ schnetpack
 mlflow
 pandas
 seaborn
+sklearn

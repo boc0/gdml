@@ -9,6 +9,7 @@ notes.py
 .idea
 .vscode
 venv
+venv39
 model*
 *.csv
 bonus

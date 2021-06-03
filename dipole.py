@@ -132,10 +132,12 @@ def hessian(f):
     return jacfwd(jacrev(f))
 
 
-def kernel(x, x_, sigma=1.0, similarity=matern):
-    _kernel = partial(similarity, x_, sigma=sigma)
-    hess = hessian(_kernel)
-    H = hess(x_)
+def kernel(x, x_, sigma=1.0, similarity=matern, descriptor=coulomb):
+    if 'sigma' in similarity.__code__.co_varnames:
+        similarity = partial(similarity, sigma=sigma)
+    similarity = partial(similarity, x_, descriptor=descriptor)
+    hess = hessian(similarity)
+    H = hess(x)
     K = np.sum(H, axis=(0, 2))
     K = (K + K.T) / 2
     return K

@@ -146,3 +146,10 @@ class classproperty(object):
         self.f = f
     def __get__(self, obj, owner):
         return self.f(owner)
+
+
+def get_data():
+    data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
+    X = np.array(data['R'])
+    y = np.array(data['D'])
+    return X, y

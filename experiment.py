@@ -1,100 +1,14 @@
 from time import time
-from copy import deepcopy
+from functools import partial
 import numpy as onp
 import jax.numpy as np
 import pandas as pd
 import mlflow
-from matplotlib import pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
+from matplotlib import pyplot as plt
+from sklearn.model_selection import RandomizedSearchCV
 from scipy.stats import loguniform
-from dipole import VectorValuedKRR, kernel_gauss, kernel_matern
 from utils import to_snake_case, classproperty
-# from schnet import SchNet as SchNetModel
-from schnet import to_spk_dataset, to_batch, train_schnet, squared_error
-from sklearn.base import BaseEstimator
-
-
-
-class Experiment:
-    shuffle = True
-    max_size = 100
-
-    @property
-    def classes(self) -> list:
-        res = []
-        for key in dir(self):
-            if not key.startswith('__') and key not in ['classes', 'multiple']:
-                val = getattr(self, key)
-                if isinstance(val, type):
-                    res.append(val)
-        return res
-
-    @property
-    def multiple(self) -> bool:
-        return len(self.classes) > 1
-
-    def __init__(self):
-        mlflow.set_experiment(to_snake_case(self.__class__.__name__))
-
-    def plot(self, data):
-        cls1, cls2 = ex.classes
-        fig, ax = plt.subplots()
-        desc1, desc2 = (cls.description for cls in (cls1, cls2))
-        sns.pointplot(x='samples trained on', y=f'error {desc1}', data=data, color='royalblue', label=desc1)
-        sns.pointplot(x='samples trained on', y=f'error {desc2}', data=data, color='orange', label=desc2)
-        ax.legend(handles=ax.lines[::len(data)+1], labels=[cls1.__name__, cls2.__name__])
-        ax.set_ylabel('error')
-        plt.savefig('learning_curve.png')
-        mlflow.log_figure(fig, 'learning_curve.png')
-        # plt.show()
-
-    def run(self):
-        # prepare data
-        dataset = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
-        X = np.array(dataset['R'])
-        y = np.array(dataset['D'])
-        M = X.shape[0]
-
-        test_indices = onp.random.choice(M, size=500, replace=False)
-        Xtest, ytest = X[test_indices], y[test_indices]
-        Xdev, Xtest = np.split(X[test_indices], 2)
-        ydev, ytest = np.split(y[test_indices], 2)
-
-        # remove test samples from X, y
-        mask = onp.ones(M, dtype=bool)
-        mask[test_indices] = False
-        X, y = X[mask], y[mask]
-
-        if self.shuffle:
-            train_indices = onp.random.choice(M-self.max_size, size=self.max_size, replace=False)
-            X, y = X[train_indices], y[train_indices]
-
-        data_subset_sizes = np.linspace(10, self.max_size, 10, dtype=np.int32)
-        errors = {cls: [] for cls in self.classes}
-
-        mlflow.start_run()
-        for size in data_subset_sizes:
-            Xtrain, ytrain = X[:size], y[:size]
-            with mlflow.start_run(nested=True):
-                mlflow.log_param('n_samples', size)
-                for cls in self.classes:
-                    error = cls.train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest)
-                    errors[cls].append(error)
-
-        if not self.multiple:
-            return
-
-        cls1, cls2 = self.classes
-        data = pd.DataFrame({'samples trained on': data_subset_sizes,
-                             f'error {cls1.description}': errors[cls1],
-                             f'error {cls2.description}': errors[cls2]
-                             })
-        self.plot(data)
-        mlflow.end_run()
-        return data
-
-
 
 
 class Model:
@@ -106,8 +20,8 @@ class Model:
     """
     cv = RandomizedSearchCV
     parameters = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
-    n_iter = 20
-    n_best = 5
+    n_iter = 3
+    n_best = 2
 
     @classproperty
     def description(self):
@@ -121,7 +35,6 @@ class Model:
         start = time()
         size = Xtrain.shape[0]
         with mlflow.start_run(nested=True):
-            print(f'\nsize: {size}')
             cv.fit(Xtrain, ytrain)
             results = cv.cv_results_
             indices = onp.argpartition(results['rank_test_score'], cls.n_best)[:cls.n_best]
@@ -155,54 +68,90 @@ class Model:
         return error
 
 
-class Similarity(Experiment):
-    class Matern(VectorValuedKRR, Model):
-        similarity = kernel_matern
+class Experiment:
+    shuffle = True
+    max_size = 100
+    n_subsets = 10
 
-    class Gauss(VectorValuedKRR, Model):
-        similarity = kernel_gauss
+    @property
+    def classes(self) -> list:
+        res = []
+        for key in dir(self):
+            if not key.startswith('__') and key not in ['classes', 'multiple']:
+                val = getattr(self, key)
+                if isinstance(val, type):
+                    if Model not in val.__mro__:
+                        val = type(val.__name__, (Model,) + val.__mro__, dict(val.__dict__))
+                    res.append(val)
+        return res
+
+    @property
+    def multiple(self) -> bool:
+        return len(self.classes) > 1
+
+    def __init__(self):
+        mlflow.set_experiment(to_snake_case(self.__class__.__name__))
+
+    def plot(self):
+        cls1, cls2 = self.classes
+        data = self.errors
+        fig, ax = plt.subplots()
+        desc1, desc2 = (cls.description for cls in (cls1, cls2))
+        sns.pointplot(x='samples trained on', y=f'error {desc1}', data=data, color='royalblue', label=desc1)
+        sns.pointplot(x='samples trained on', y=f'error {desc2}', data=data, color='orange', label=desc2)
+        ax.legend(handles=ax.lines[::len(data)+1], labels=[cls1.__name__, cls2.__name__])
+        ax.set_ylabel('error')
+        plt.savefig('learning_curve.png')
+        mlflow.log_figure(fig, 'learning_curve.png')
+        # plt.show()
+
+    def run(self):
+        # prepare data
+        dataset = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
+        X = np.array(dataset['R'])
+        y = np.array(dataset['D'])
+        M = X.shape[0]
+
+        test_indices = onp.random.choice(M, size=500, replace=False)
+        Xtest, ytest = X[test_indices], y[test_indices]
+        Xdev, Xtest = np.split(X[test_indices], 2)
+        ydev, ytest = np.split(y[test_indices], 2)
+
+        # remove test samples from X, y
+        mask = onp.ones(M, dtype=bool)
+        mask[test_indices] = False
+        X, y = X[mask], y[mask]
+
+        if self.shuffle:
+            train_indices = onp.random.choice(M-self.max_size, size=self.max_size, replace=False)
+            X, y = X[train_indices], y[train_indices]
+
+        data_subset_sizes = np.linspace(10, self.max_size, self.n_subsets, dtype=np.int32)
+        # errors = {cls.description: [] for cls in self.classes}
+        self.errors = {f'error {cls.description}': [] for cls in self.classes}
+
+        mlflow.start_run()
+        for size in data_subset_sizes:
+            Xtrain, ytrain = X[:size], y[:size]
+            with mlflow.start_run(nested=True):
+                print(f'\nn_samples: {size}')
+                mlflow.log_param('n_samples', size)
+                for cls in self.classes:
+                    error = cls.train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest)
+                    self.errors[f'error {cls.description}'].append(error)
+
+        if not self.multiple:
+            return
+
+        self.errors |= {'samples trained on': data_subset_sizes}
+        self.errors = pd.DataFrame(self.errors)
+        self.plot()
+        mlflow.end_run()
+        return self.errors
 
 
-class SchNetModel(BaseEstimator):
-    def __init__(self, n_atom_basis=128, n_interactions=6):
-        self.n_atom_basis = n_atom_basis
-        self.n_interactions = n_interactions
-        self.model = None
 
-    def fit(self, Xtrain, ytrain):
-        M = Xtrain.shape[0]
-        dev_size = max(M // 10, 1)
-        Xtrain, Xdev = np.split(Xtrain, [dev_size])
-        ytrain, ydev = np.split(ytrain, [dev_size])
-        train = to_spk_dataset(Xtrain, ytrain)
-        dev = to_spk_dataset(Xdev, ydev)
-        self.model = train_schnet(train, dev, size=M,
-                                  n_atom_basis=self.n_atom_basis,
-                                  n_interactions=self.n_interactions)
-        # print('fit completed: ', end='')
-        # print(self.score(Xtrain, ytrain))
-
-    def predict(self, inputs):
-        return self.model(inputs)
-
-    def score(self, inputs, targets):
-        test_batch = to_batch(to_spk_dataset(inputs, targets))
-        pred = self.predict(test_batch)
-        return -squared_error(pred, test_batch)
-
-
-class SchNet(Experiment):
-    class SchNet(SchNetModel, Model):
-        cv = GridSearchCV
-        parameters = dict(
-            n_atom_basis=[32, 64, 128],
-            n_interactions=[3, 6])
-
-    class KRR(VectorValuedKRR, Model):
-        ...
 
 
 if __name__ == '__main__':
-
-    ex = SchNet()
-    data = ex.run()
+    data = experiment.run()

@@ -12,13 +12,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from dipole import VectorValuedKRR, train
-from utils import matern, coulomb
+from utils import matern, coulomb, get_data
 
 
 # loss function
 def squared_error(batch, result):
     diff = batch['dipole'].squeeze() - result['dipole'].squeeze()
-    # err_sq = torch.linalg.norm(diff, axis=1)**2
     err_sq = diff**2
     return err_sq.mean().item()
 
@@ -69,15 +68,9 @@ def train_schnet(
     return torch.load(os.path.join(model_dir, 'best_model'))
 
 
-def get_xy():
-    data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
-    X = np.array(data['R'])
-    y = np.array(data['D'])
-    return X, y
-
 
 def to_spk_dataset(Xcut, ycut):
-    _, y = get_xy()
+    _, y = get_data()
     atomsdb = AtomsData('data/data.db')
     n_samples = Xcut.shape[0]
     res = np.array([np.argwhere((y == ycut[i]))[0][0].item() for i in range(n_samples)])
@@ -96,18 +89,18 @@ class SchNet(BaseEstimator):
         self.model = None
 
     def fit(self, Xtrain, ytrain):
-        M = Xtrain.size
-        dev_size = M // 10
+        M = Xtrain.shape[0]
+        dev_size = max(M // 10, 1)
         Xtrain, Xdev = np.split(Xtrain, [dev_size])
         ytrain, ydev = np.split(ytrain, [dev_size])
         train = to_spk_dataset(Xtrain, ytrain)
         dev = to_spk_dataset(Xdev, ydev)
         self.model = train_schnet(train, dev, size=M,
-            n_atom_basis=self.n_atom_basis,
-            n_interactions=self.n_interactions)
+                                  n_atom_basis=self.n_atom_basis,
+                                  n_interactions=self.n_interactions)
 
-    def predict(self, data):
-        return self.model(data)
+    def predict(self, inputs):
+        return self.model(inputs)
 
     def score(self, inputs, targets):
         test_batch = to_batch(to_spk_dataset(inputs, targets))
@@ -117,13 +110,10 @@ class SchNet(BaseEstimator):
 
 
 
-
 if __name__ == '__main__':
     data_subset_sizes = list(np.linspace(10, 100, 10, dtype=int))
 
-    data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
-    X = np.array(data['R'])
-    y = np.array(data['D'])
+    X, y = get_data()
 
     atomsdb = AtomsData('data/data.db')
     M = len(atomsdb)
