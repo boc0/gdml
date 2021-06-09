@@ -83,6 +83,7 @@ def to_batch(dataset):
 
 
 class SchNet(BaseEstimator):
+    n_epochs = 50
     def __init__(self, n_atom_basis=128, n_interactions=6):
         self.n_atom_basis = n_atom_basis
         self.n_interactions = n_interactions
@@ -97,7 +98,8 @@ class SchNet(BaseEstimator):
         dev = to_spk_dataset(Xdev, ydev)
         self.model = train_schnet(train, dev, size=M,
                                   n_atom_basis=self.n_atom_basis,
-                                  n_interactions=self.n_interactions)
+                                  n_interactions=self.n_interactions,
+                                  n_epochs=self.n_epochs)
 
     def predict(self, inputs):
         return self.model(inputs)
