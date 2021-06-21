@@ -1,3 +1,4 @@
+import os
 from time import time
 from functools import partial
 import numpy as onp
@@ -20,7 +21,7 @@ class Model:
     """
     cv = RandomizedSearchCV
     parameters = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
-    n_iter = 20
+    n_iter = 30
 
     @classproperty
     def description(self):
@@ -48,7 +49,7 @@ class Model:
 
 
 DEVSIZE = 0.1
-
+EXPERIMENTS_FOLDER = 'experiments'
 
 class Experiment:
     shuffle = True
@@ -71,8 +72,17 @@ class Experiment:
     def multiple(self) -> bool:
         return len(self.classes) > 1
 
+    @property
+    def name(self) -> str:
+        return to_snake_case(self.__class__.__name__)
+
+    @property
+    def folder(self) -> str:
+        return os.path.join(EXPERIMENTS_FOLDER, self.name)
+
     def __init__(self):
-        mlflow.set_experiment(to_snake_case(self.__class__.__name__))
+        mlflow.set_experiment(self.name)
+        os.makedirs(self.folder, exist_ok=True)
 
     def plot(self):
         cls1, cls2 = self.classes
@@ -83,7 +93,7 @@ class Experiment:
         sns.pointplot(x='samples trained on', y=f'error {desc2}', data=data, color='orange', label=desc2)
         ax.legend(handles=ax.lines[::len(data)+1], labels=[cls1.__name__, cls2.__name__])
         ax.set_ylabel('error')
-        plt.savefig('learning_curve.png')
+        plt.savefig(os.path.join(self.folder, 'learning_curve.png'))
         mlflow.log_figure(fig, 'learning_curve.png')
         # plt.show()
 
