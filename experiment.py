@@ -1,15 +1,21 @@
 import os
 from time import time
-from functools import partial
 import numpy as onp
 import jax.numpy as np
 import pandas as pd
 import mlflow
 import seaborn as sns
 from matplotlib import pyplot as plt
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.experimental import enable_halving_search_cv  # noqa
+from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV
 from scipy.stats import loguniform
 from utils import to_snake_case, classproperty
+
+
+PARAM_GRID_RANDOM = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
+sigmas = list(np.logspace(1, 4, 19))
+lambdas = list(np.logspace(-2, 3, 21))
+PARAMETERS = {'sigma': sigmas, 'lamb': lambdas}
 
 
 class Model:
@@ -19,8 +25,7 @@ class Model:
     Must provide the parameters argument as a dict which maps argument names to
     a list or distribution of parameter values to search.
     """
-    cv = RandomizedSearchCV
-    parameters = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
+    cv = GridSearchCV
     n_iter = 30
 
     @classproperty
@@ -29,8 +34,7 @@ class Model:
 
     @classmethod
     def train(cls, Xtrain, ytrain, Xtest, ytest):
-        kwargs = {'n_iter': cls.n_iter} if cls.cv is RandomizedSearchCV else {}
-        cv = cls.cv(cls(), cls.parameters, **kwargs)
+        cv = cls.cv(cls(), PARAMETERS)
 
         start = time()
         with mlflow.start_run(nested=True):
@@ -50,6 +54,7 @@ class Model:
 
 DEVSIZE = 0.1
 EXPERIMENTS_FOLDER = 'experiments'
+
 
 class Experiment:
     shuffle = True
