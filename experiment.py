@@ -13,8 +13,8 @@ from utils import to_snake_case, classproperty
 
 
 PARAM_GRID_RANDOM = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
-sigmas = list(np.logspace(1, 4, 19))
-lambdas = list(np.logspace(-2, 3, 21))
+sigmas = list(np.logspace(1, 4, 38))
+lambdas = list(np.logspace(-2, 3, 42))
 PARAMETERS = {'sigma': sigmas, 'lamb': lambdas}
 
 
