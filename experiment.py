@@ -27,6 +27,7 @@ class Model:
     """
     cv = GridSearchCV
     n_iter = 30
+    parameters = PARAMETERS
 
     @classproperty
     def description(self):
@@ -34,7 +35,7 @@ class Model:
 
     @classmethod
     def train(cls, Xtrain, ytrain, Xtest, ytest):
-        cv = cls.cv(cls(), PARAMETERS)
+        cv = cls.cv(cls(), cls.parameters)
 
         start = time()
         with mlflow.start_run(nested=True):
