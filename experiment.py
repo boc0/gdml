@@ -7,7 +7,7 @@ import mlflow
 import seaborn as sns
 from matplotlib import pyplot as plt
 from sklearn.experimental import enable_halving_search_cv  # noqa
-from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV
+from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV, RandomizedSearchCV
 from scipy.stats import loguniform
 from utils import to_snake_case, classproperty
 
@@ -26,8 +26,8 @@ class Model:
     a list or distribution of parameter values to search.
     """
     cv = GridSearchCV
-    n_iter = 30
-    parameters = PARAMETERS
+    n_iter = 60
+    parameters = PARAM_GRID_RANDOM
 
     @classproperty
     def description(self):
@@ -35,7 +35,11 @@ class Model:
 
     @classmethod
     def train(cls, Xtrain, ytrain, Xtest, ytest):
-        cv = cls.cv(cls(), cls.parameters)
+        kwargs = {
+            'n_iter': cls.n_iter,
+            'random_state': 1
+            } if cls.cv is RandomizedSearchCV else {}
+        cv = cls.cv(cls(), cls.parameters, **kwargs)
 
         start = time()
         with mlflow.start_run(nested=True):
