@@ -4,10 +4,10 @@ from experiment import Experiment
 
 class Similarity(Experiment):
     class Matern(VectorValuedKRR):
-        similarity = kernel_matern
+        kernel = kernel_matern
 
     class Gauss(VectorValuedKRR):
-        similarity = kernel_gauss
+        kernel = kernel_gauss
 
 
 if __name__ == '__main__':
