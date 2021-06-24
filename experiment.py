@@ -25,7 +25,7 @@ class Model:
     Must provide the parameters argument as a dict which maps argument names to
     a list or distribution of parameter values to search.
     """
-    cv = GridSearchCV
+    cv = RandomizedSearchCV
     n_iter = 60
     parameters = PARAM_GRID_RANDOM
 
