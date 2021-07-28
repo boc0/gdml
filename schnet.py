@@ -11,8 +11,7 @@ from schnetpack.data import AtomsData
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from dipole import VectorValuedKRR, train
-from utils import matern, coulomb, get_data
+from utils import get_data
 
 
 # loss function
@@ -84,6 +83,7 @@ def to_batch(dataset):
 
 class SchNet(BaseEstimator):
     n_epochs = 50
+
     def __init__(self, n_atom_basis=128, n_interactions=6):
         self.n_atom_basis = n_atom_basis
         self.n_interactions = n_interactions
@@ -144,7 +144,6 @@ if __name__ == '__main__':
     for size in data_subset_sizes:
         print(size)
         Xtrain, ytrain = X[:size], y[:size]
-        # train(Xtrain, ytrain, Xdev, ydev, Xtest, ytest, n_best=2)
 
         train = atomsdb.create_subset(train_indices[:size])
         best_model = train_schnet(train, val, size=size)
