@@ -174,12 +174,12 @@ class Experiment:
         self.errors = {cls.description: onp.zeros((n_runs, len(sizes))) for cls in self.classes}
 
         with mlflow.start_run():
-            for i in range(n_runs):
+            for i in tqdm(range(n_runs)):
                 train_indices = onp.random.choice(M-self.max_size, size=self.max_size, replace=False)
                 Xshuf, yshuf = X[train_indices], y[train_indices]
                 with mlflow.start_run(nested=True):
                     mlflow.log_param('run', i)
-                    for j, size in list(enumerate(sizes)):
+                    for j, size in tqdm(list(enumerate(sizes))):
                         Xtrain, ytrain = Xshuf[:size], yshuf[:size]
                         with mlflow.start_run(nested=True):
                             # print(f'\nn_samples: {size}')
