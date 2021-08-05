@@ -13,6 +13,7 @@ from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV, Randomize
 from scipy.stats import loguniform
 from utils import to_snake_case, classproperty
 from jax.interpreters import xla
+import pandas
 
 
 PARAM_GRID_RANDOM = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
@@ -50,6 +51,10 @@ class Model:
             results = cv.cv_results_
             best = onp.argmin(results['mean_test_score'])
             best_params = results['params'][best]
+            results = pandas.DataFrame(cv.cv_results_)
+            filename = 'results.xlsx'
+            results.to_excel(filename)
+            mlflow.log_artifact(filename, '')
             # print(f'{cls.__name__} best params: {best_params}')
             mlflow.log_params(best_params)
             error = -cv.score(Xtest, ytest)
@@ -62,7 +67,7 @@ class Model:
 
 DEVSIZE = 0.1
 EXPERIMENTS_FOLDER = 'experiments'
-
+THRESHOLD = 1
 
 class Experiment:
     shuffle = True
@@ -107,7 +112,18 @@ class Experiment:
             errs = self.errors
         except AttributeError:
             raise ValueError('Trying to reduce while errors not yet computed')
-        return {f'error {cls.description}': onp.mean(errs[cls.description], axis=0) for cls in self.classes}
+
+        descriptions = [cls.description for cls in self.classes]
+        for cls in descriptions:
+            while np.max(errs[cls]) >= THRESHOLD:  # delete rows with very high error
+                row, column = np.unravel_index(np.argmax(errs[cls]), errs[cls].shape)
+                for _cls in descriptions:
+                    errs[_cls] = np.delete(errs[_cls], row, 0)
+
+        res = {f'error {cls.description}': onp.mean(errs[cls.description], axis=0) for cls in self.classes}
+        print(errs)
+        print(res)
+        return res
 
     def plot(self):
         errors = self.reduce()
@@ -124,8 +140,10 @@ class Experiment:
                       y=f'error {desc2}', data=data, color='orange', label=desc2)
         ax.legend(handles=ax.lines[::len(data)+1], labels=[cls1.__name__, cls2.__name__])
         ax.set_ylabel('error')
-        plt.savefig(os.path.join(self.folder, 'learning_curve.png'))
+        fig_path = os.path.join(self.folder, 'learning_curve.png')
+        plt.savefig(fig_path)
         mlflow.log_figure(fig, 'learning_curve.png')
+        mlflow.log_artifact(fig_path, '')
         # plt.show()
 
     @property
