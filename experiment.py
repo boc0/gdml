@@ -1,5 +1,5 @@
 from dipole import VectorValuedKRR, kernel_gauss, kernel_matern
-import os
+import os, psutil
 from time import time
 import numpy as onp
 import jax.numpy as np
@@ -12,6 +12,7 @@ from sklearn.experimental import enable_halving_search_cv  # noqa
 from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV, RandomizedSearchCV
 from scipy.stats import loguniform
 from utils import to_snake_case, classproperty
+from jax.interpreters import xla
 
 
 PARAM_GRID_RANDOM = {'sigma': loguniform(10**1, 10**4), 'lamb': loguniform(10**-2, 10**3)}
@@ -166,6 +167,9 @@ class Experiment:
                             for cls in self.classes:
                                 error = cls.train(Xtrain, ytrain, Xtest, ytest)
                                 self.errors[cls.description][i, j] = error
+                # process = psutil.Process(os.getpid())
+                # print(process.memory_info().rss)  # in bytes
+                xla._xla_callable.cache_clear()
 
         self.plot()
         return self.errors
