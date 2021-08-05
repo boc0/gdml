@@ -28,7 +28,7 @@ class Model:
     a list or distribution of parameter values to search.
     """
     cv = RandomizedSearchCV
-    n_iter = 60
+    n_iter = 20
     parameters = PARAM_GRID_RANDOM
 
     @classproperty
