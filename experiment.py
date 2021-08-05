@@ -165,26 +165,29 @@ class Experiment:
         mask[test_indices] = False
         X, y = X[mask], y[mask]
 
-        if self.shuffle:
-            train_indices = onp.random.choice(M-self.max_size, size=self.max_size, replace=False)
-            X, y = X[train_indices], y[train_indices]
+        # if self.shuffle:
+        #     train_indices = onp.random.choice(M-self.max_size, size=self.max_size, replace=False)
+        #     X, y = X[train_indices], y[train_indices]
 
         sizes = self.sizes
         n_runs = self.n_runs
         self.errors = {cls.description: onp.zeros((n_runs, len(sizes))) for cls in self.classes}
 
         with mlflow.start_run():
-            for i in tqdm(range(n_runs)):
+            for i in range(n_runs):
+                train_indices = onp.random.choice(M-self.max_size, size=self.max_size, replace=False)
+                Xshuf, yshuf = X[train_indices], y[train_indices]
                 with mlflow.start_run(nested=True):
                     mlflow.log_param('run', i)
-                    for j, size in tqdm(list(enumerate(sizes))):
-                        Xtrain, ytrain = X[:size], y[:size]
+                    for j, size in list(enumerate(sizes)):
+                        Xtrain, ytrain = Xshuf[:size], yshuf[:size]
                         with mlflow.start_run(nested=True):
                             # print(f'\nn_samples: {size}')
                             mlflow.log_param('n_samples', size)
                             for cls in self.classes:
                                 error = cls.train(Xtrain, ytrain, Xtest, ytest)
                                 self.errors[cls.description][i, j] = error
+
                 # process = psutil.Process(os.getpid())
                 # print(process.memory_info().rss)  # in bytes
                 xla._xla_callable.cache_clear()

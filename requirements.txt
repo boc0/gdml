@@ -5,3 +5,5 @@ mlflow
 pandas
 seaborn
 sklearn
+openpyxl
+*.xlsx
