@@ -179,12 +179,12 @@ class Experiment:
                 with mlflow.start_run(nested=True):
                     mlflow.log_param('run', i)
                     for j, size in tqdm(list(enumerate(sizes))):
-                        Xtrain, ytrain = Xtrain[:size], ytrain[:size]
+                        Xcut, ycut = Xtrain[:size], ytrain[:size]
                         with mlflow.start_run(nested=True):
                             # print(f'\nn_samples: {size}')
                             mlflow.log_param('n_samples', size)
                             for cls in self.classes:
-                                error = cls.train(Xtrain, ytrain, Xtest, ytest)
+                                error = cls.train(Xcut, ycut, Xtest, ytest)
                                 self.errors[cls.description][i, j] = error
 
 
