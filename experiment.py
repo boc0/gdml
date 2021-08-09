@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from sklearn.experimental import enable_halving_search_cv  # noqa
 from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV, RandomizedSearchCV
 from scipy.stats import loguniform
-from utils import to_snake_case, classproperty
+from utils import to_snake_case, classproperty, get_data
 from jax.interpreters import xla
 import pandas
 
@@ -152,9 +152,7 @@ class Experiment:
 
     def run(self):
         # prepare data
-        dataset = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
-        X = np.array(dataset['R'])
-        y = np.array(dataset['D'])
+        X, y = get_data()
         M = X.shape[0]
 
         test_indices = onp.random.choice(M, size=self.test_size, replace=False)
@@ -165,22 +163,23 @@ class Experiment:
         mask[test_indices] = False
         X, y = X[mask], y[mask]
 
-        # if self.shuffle:
-        #     train_indices = onp.random.choice(M-self.max_size, size=self.max_size, replace=False)
-        #     X, y = X[train_indices], y[train_indices]
-
         sizes = self.sizes
         n_runs = self.n_runs
         self.errors = {cls.description: onp.zeros((n_runs, len(sizes))) for cls in self.classes}
 
         with mlflow.start_run():
             for i in tqdm(range(n_runs)):
-                train_indices = onp.random.choice(M-self.max_size, size=self.max_size, replace=False)
-                Xshuf, yshuf = X[train_indices], y[train_indices]
+                if self.shuffle:
+                    train_indices = onp.random.choice(M-self.test_size, size=self.max_size, replace=False)
+                    Xtrain, ytrain = X[train_indices], y[train_indices]
+                else:
+                    train_start = onp.random.choice(M-self.test_size, size=self.max_size)[0]
+                    train_indices = slice(train_start, train_start+self.max_size)
+                    Xtrain, ytrain = X[train_indices], y[train_indices]
                 with mlflow.start_run(nested=True):
                     mlflow.log_param('run', i)
                     for j, size in tqdm(list(enumerate(sizes))):
-                        Xtrain, ytrain = Xshuf[:size], yshuf[:size]
+                        Xtrain, ytrain = Xtrain[:size], ytrain[:size]
                         with mlflow.start_run(nested=True):
                             # print(f'\nn_samples: {size}')
                             mlflow.log_param('n_samples', size)
@@ -188,8 +187,7 @@ class Experiment:
                                 error = cls.train(Xtrain, ytrain, Xtest, ytest)
                                 self.errors[cls.description][i, j] = error
 
-                # process = psutil.Process(os.getpid())
-                # print(process.memory_info().rss)  # in bytes
+
                 xla._xla_callable.cache_clear()
 
         self.plot()
@@ -203,6 +201,8 @@ class Similarity(Experiment):
     max_size = 10
     test_size = 1
     n_subsets = 2
+    n_runs = 2
+    shuffle = False
 
     class Matern(VectorValuedKRR):
         n_iter = 2
