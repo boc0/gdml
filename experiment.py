@@ -75,7 +75,7 @@ class Experiment:
     max_size = 100
     test_size = 500
     n_subsets = 10
-    n_runs = 10
+    n_runs = 6
 
     @property
     def classes(self) -> list:
