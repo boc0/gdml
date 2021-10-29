@@ -148,8 +148,9 @@ class classproperty(object):
         return self.f(owner)
 
 
-def get_data():
-    data = np.load('data/HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q.npz')
+def get_data(filename='HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q', target='dipole moment'):
+    data = np.load(f'data/{filename}.npz')
     X = np.array(data['R'])
-    y = np.array(data['D'])
+    key = 'D' if target == 'dipole moment' else 'F'
+    y = np.array(data[key])
     return X, y

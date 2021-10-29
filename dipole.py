@@ -21,7 +21,7 @@ from sklearn.metrics import mean_squared_error
 import mlflow
 import mlflow.sklearn
 
-from utils import KRR, matern, binom, safe_sqrt, fill_diagonal, coulomb, gaussian
+from utils import KRR, matern, binom, safe_sqrt, fill_diagonal, coulomb, gaussian, get_data
 
 
 def kernel_matern(x, x_, sigma=1.0, n=2, descriptor=coulomb):
@@ -174,6 +174,14 @@ class VectorValuedKRR(KRR):
     @property
     def means(self):
         return np.mean(self.y)
+
+    @property
+    def n_samples(self):
+        return self.X.shape[0]
+
+    @property
+    def n_atoms(self):
+        return self.X.shape[1]
 
     def fit(self, X, y):
         self.X = X
