@@ -21,6 +21,7 @@ from sklearn.metrics import mean_squared_error
 import mlflow
 import mlflow.sklearn
 
+from dipole import VectorValuedKRR, kernel_matrix, factorial
 from utils import KRR, matern, binom, safe_sqrt, fill_diagonal, coulomb, gaussian, get_data
 
 
@@ -72,7 +73,7 @@ def kernel_big(x, x_, sigma=1.0, n=2, descriptor=coulomb):
         return sums
 
     K = vmap(vmap(kernel_pq, (0, None)), (None, 0))(rangeD, rangeD)
-    K = (K + K.T) / 2
+    # K = (K + K.T) / 2
     K = K.reshape(3 * N, 3 * N)
     return K
 
@@ -93,6 +94,7 @@ class ForceKRR(VectorValuedKRR):
         self.alphas = alphas.reshape(samples, 3 * self.n_atoms)
 
     def predict(self, x):
+        n_samples = x.shape[0]
         def contribution(i, x):
             return self.__class__.kernel(x, self.X[i], sigma=self.sigma) @ self.alphas[i]
         @vmap
@@ -104,15 +106,29 @@ class ForceKRR(VectorValuedKRR):
             return mu
         results = predict(x)
         res = np.array(results) * self.stdevs + self.means # "de-normalize"
-        res = res.reshape(self.n_samples, self.n_atoms)
+        res = res.reshape(n_samples, self.n_atoms, 3)
         return res
 
     def score(self, x, y, angle=False):
         yhat = self.predict(x)
-        error = mean_squared_error(yhat, self.y.reshape(), squared=True)
+        n_samples = x.shape[0]
+        yhat, y = (arr.reshape(3 * n_samples * self.n_atoms) for arr in (yhat, y))
+        error = mean_squared_error(yhat, y, squared=True)
         if not angle:
             return -onp.mean(error)
         angle = [np.degrees(np.arccos(np.clip(unit(yhat[i]) @ unit(y[i]), -1.0, 1.0)))
                  for i in range(y.shape[0])]
         angle = np.array(angle)
         return np.mean(error), np.mean(angle)
+
+
+if __name__ == '__main__':
+    X, y = get_data('uracil_dft', target='force')
+    model = ForceKRR()
+    sigmas = list(np.linspace(10, 100, 10))
+    lambdas = list(np.logspace(-3, 3, 13))
+    params = {'sigma': sigmas, 'lamb': lambdas}
+    cv = GridSearchCV(model, params)
+    cv.fit(X[:20], y[:20])
+    res = cv.cv_results_
+    scores = res['mean_test_score']
