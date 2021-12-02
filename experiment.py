@@ -66,8 +66,9 @@ class Model:
 
 
 DEVSIZE = 0.1
-EXPERIMENTS_FOLDER = 'experiments'
+EXPERIMENTS_FOLDER = 'experiments/results'
 THRESHOLD = 1
+COLORS = ['royalblue', 'orange', 'darkmagenta', 'darkgreen']
 
 class Experiment:
     shuffle = True
@@ -102,8 +103,8 @@ class Experiment:
         return os.path.join(EXPERIMENTS_FOLDER, self.name)
 
     def __init__(self):
-        if not self.multiple:
-            raise ValueError('Experiment should include multiple models!')
+        # if not self.multiple:
+        #     raise ValueError('Experiment should include multiple models!')
         mlflow.set_experiment(self.name)
         os.makedirs(self.folder, exist_ok=True)
 
@@ -114,11 +115,11 @@ class Experiment:
             raise ValueError('Trying to reduce while errors not yet computed')
 
         descriptions = [cls.description for cls in self.classes]
-        for cls in descriptions:
-            while np.max(errs[cls]) >= THRESHOLD:  # delete rows with very high error
-                row, column = np.unravel_index(np.argmax(errs[cls]), errs[cls].shape)
-                for _cls in descriptions:
-                    errs[_cls] = np.delete(errs[_cls], row, 0)
+        # for cls in descriptions:
+        #     while np.max(errs[cls]) >= THRESHOLD:  # delete rows with very high error
+        #         row, column = np.unravel_index(np.argmax(errs[cls]), errs[cls].shape)
+        #         for _cls in descriptions:
+        #             errs[_cls] = np.delete(errs[_cls], row, 0)
 
         res = {f'error {cls.description}': onp.mean(errs[cls.description], axis=0) for cls in self.classes}
         print(errs)
@@ -195,7 +196,97 @@ class Experiment:
 
 
 
+class Atoms(Experiment):
+    min_size = 5
+    max_size = 10
+    test_size = 1
+    n_subsets = 2
+    n_runs = 2
+    shuffle = False
+    data = 'HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q'
+
+    def run(self):
+        # prepare data
+        X, y = get_data(self.data)
+        M = X.shape[0]
+
+        test_indices = onp.random.choice(M, size=self.test_size, replace=False)
+        Xtest, ytest = X[test_indices], y[test_indices]
+
+        # remove test samples from X, y
+        mask = onp.ones(M, dtype=bool)
+        mask[test_indices] = False
+        X, y = X[mask], y[mask]
+
+        sizes = self.sizes
+        n_runs = self.n_runs
+        self.errors = {cls.description: onp.zeros((n_runs, len(sizes))) for cls in self.classes}
+
+        with mlflow.start_run():
+            for i in tqdm(range(n_runs)):
+                if self.shuffle:
+                    train_indices = onp.random.choice(M-self.test_size, size=self.max_size, replace=False)
+                    Xtrain, ytrain = X[train_indices], y[train_indices]
+                else:
+                    train_start = onp.random.choice(M-self.test_size, size=self.max_size)[0]
+                    train_indices = slice(train_start, train_start+self.max_size)
+                    Xtrain, ytrain = X[train_indices], y[train_indices]
+                with mlflow.start_run(nested=True):
+                    mlflow.log_param('run', i)
+                    for j, size in tqdm(list(enumerate(sizes))):
+                        Xcut, ycut = Xtrain[:size], ytrain[:size]
+                        with mlflow.start_run(nested=True):
+                            # print(f'\nn_samples: {size}')
+                            mlflow.log_param('n_samples', size)
+                            for cls in self.classes:
+                                error = cls.train(Xcut, ycut, Xtest, ytest)
+                                self.errors[cls.description][i, j] = error
+
+
+                xla._xla_callable.cache_clear()
+
+        print(self.errors)
+        return self.errors
+
+
+
+class HOOHExp(Atoms):
+    class HOOH(VectorValuedKRR):
+        n_iter = 2
+
+
+ex = HOOHExp()
+ex.run()
+
+
+class Cubane(Atoms):
+    data = 'cubane.DFT.NVT.PBE-TS.l1t.MD.300K.R_E_F_D'
+    class Cubane(VectorValuedKRR):
+        n_iter = 2
+
+ex = Cubane()
+ex.run()
+
+class Glycine(Atoms):
+    data = 'glycine.DFT.PBE-TS.l1t.MD.500K.R_E_F_D'
+    class Glycine(VectorValuedKRR):
+        n_iter = 2
+
+X, y = get_data('cubane.DFT.NVT.PBE-TS.l1t.MD.300K.R_E_F_D')
+X.shape
+
+ex = Glycine()
+ex.run()
+
+class Alanine(Atoms):
+    data = 'alanine.DFT.PBE-TS.l1t.MD.500K.R_E_F_D'
+    class Alanine(VectorValuedKRR):
+        n_iter = 2
+
+ex = Alanine()
+ex.run()
 '''
+
 class Similarity(Experiment):
     min_size = 5
     max_size = 10
@@ -213,7 +304,7 @@ class Similarity(Experiment):
         kernel = kernel_gauss
 
 
-
-ex = Similarity()
-ex.run()
+if __name__ == '__main__':
+    ex = Similarity()
+    ex.run()
 '''
