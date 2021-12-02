@@ -1,5 +1,6 @@
 from dipole import VectorValuedKRR, kernel_gauss, kernel_matern
-import os, psutil
+import os
+import psutil
 from time import time
 import numpy as onp
 import jax.numpy as np
@@ -32,6 +33,7 @@ class Model:
     cv = RandomizedSearchCV
     n_iter = 20
     parameters = PARAM_GRID_RANDOM
+    data = 'HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q'
 
     @classproperty
     def description(self):
@@ -58,7 +60,7 @@ class Model:
             # print(f'{cls.__name__} best params: {best_params}')
             mlflow.log_params(best_params)
             error = -cv.score(Xtest, ytest)
-            # print(f'error: {error}')
+            print(error)
             mlflow.log_metric('error', error)
             mlflow.log_metric('time', time() - start)
         # print(f'time taken: {time() - start}')
@@ -69,6 +71,7 @@ DEVSIZE = 0.1
 EXPERIMENTS_FOLDER = 'experiments/results'
 THRESHOLD = 1
 COLORS = ['royalblue', 'orange', 'darkmagenta', 'darkgreen']
+
 
 class Experiment:
     shuffle = True
@@ -121,7 +124,8 @@ class Experiment:
         #         for _cls in descriptions:
         #             errs[_cls] = np.delete(errs[_cls], row, 0)
 
-        res = {f'error {cls.description}': onp.mean(errs[cls.description], axis=0) for cls in self.classes}
+        res = {f'error {cls.description}': onp.mean(
+            errs[cls.description], axis=0) for cls in self.classes}
         print(errs)
         print(res)
         return res
@@ -171,7 +175,8 @@ class Experiment:
         with mlflow.start_run():
             for i in tqdm(range(n_runs)):
                 if self.shuffle:
-                    train_indices = onp.random.choice(M-self.test_size, size=self.max_size, replace=False)
+                    train_indices = onp.random.choice(
+                        M-self.test_size, size=self.max_size, replace=False)
                     Xtrain, ytrain = X[train_indices], y[train_indices]
                 else:
                     train_start = onp.random.choice(M-self.test_size, size=self.max_size)[0]
@@ -187,7 +192,6 @@ class Experiment:
                             for cls in self.classes:
                                 error = cls.train(Xcut, ycut, Xtest, ytest)
                                 self.errors[cls.description][i, j] = error
-
 
                 xla._xla_callable.cache_clear()
 
@@ -195,116 +199,89 @@ class Experiment:
         return self.errors
 
 
-
 class Atoms(Experiment):
-    min_size = 5
-    max_size = 10
-    test_size = 1
-    n_subsets = 2
-    n_runs = 2
-    shuffle = False
-    data = 'HOOH.DFT.PBE-TS.light.MD.500K.50k.R_E_F_D_Q'
 
     def run(self):
         # prepare data
-        X, y = get_data(self.data)
-        M = X.shape[0]
+
+        data = {cls: {'X': (dataset := get_data(cls.data))[
+                            0], 'y': dataset[1]} for cls in self.classes}
+
+        classes = list(data.keys())
+        M = min([data[cls]['X'].shape[0] for cls in classes])
+
+        def subset(cls, name, indices):
+            for key in ['X', 'y']:
+                data[cls][f'{key}{name}'] = data[cls][key][indices]
 
         test_indices = onp.random.choice(M, size=self.test_size, replace=False)
-        Xtest, ytest = X[test_indices], y[test_indices]
+        for cls in classes:
+            for key in ['X', 'y']:
+                data[cls][f'{key}test'] = data[cls][key][test_indices]
 
-        # remove test samples from X, y
-        mask = onp.ones(M, dtype=bool)
-        mask[test_indices] = False
-        X, y = X[mask], y[mask]
+            # remove test samples from X, y
+            mask = onp.ones(M, dtype=bool)
+            mask[test_indices] = False
+            for key in ['X', 'y']:
+                data[cls][key] = data[cls][key][mask]
 
         sizes = self.sizes
         n_runs = self.n_runs
         self.errors = {cls.description: onp.zeros((n_runs, len(sizes))) for cls in self.classes}
 
         with mlflow.start_run():
-            for i in tqdm(range(n_runs)):
-                if self.shuffle:
-                    train_indices = onp.random.choice(M-self.test_size, size=self.max_size, replace=False)
-                    Xtrain, ytrain = X[train_indices], y[train_indices]
-                else:
-                    train_start = onp.random.choice(M-self.test_size, size=self.max_size)[0]
-                    train_indices = slice(train_start, train_start+self.max_size)
-                    Xtrain, ytrain = X[train_indices], y[train_indices]
+            for i in range(n_runs):
                 with mlflow.start_run(nested=True):
                     mlflow.log_param('run', i)
-                    for j, size in tqdm(list(enumerate(sizes))):
-                        Xcut, ycut = Xtrain[:size], ytrain[:size]
-                        with mlflow.start_run(nested=True):
-                            # print(f'\nn_samples: {size}')
-                            mlflow.log_param('n_samples', size)
-                            for cls in self.classes:
+                    print(f'\nrun {i+1}\n')
+                    for cls in classes:
+                        desc = cls.description
+                        if self.shuffle:
+                            train_indices = onp.random.choice(
+                                M-self.test_size, size=self.max_size, replace=False)
+                            for key in ['X', 'y']:
+                                data[cls][f'{key}train'] = data[cls][key][train_indices]
+                        else:
+                            train_start = onp.random.choice(M-self.test_size, size=self.max_size)[0]
+                            train_indices = slice(train_start, train_start+self.max_size)
+                            for key in ['X', 'y']:
+                                data[cls][f'{key}train'] = data[cls][key][train_indices]
+
+                        for j, size in list(enumerate(sizes)):
+                            with mlflow.start_run(nested=True):
+                                mlflow.log_param('model', desc)
+                                print(desc, end=' ')
+                                print(f'{size} samples', end=' ')
+                                Xcut, ycut = (data[cls][f'{key}train'][:size] for key in ['X', 'y'])
+                                Xtest, ytest = (data[cls][f'{key}test'] for key in ['X', 'y'])
+                                # print(f'\nn_samples: {size}')
+                                mlflow.log_param('n_samples', size)
                                 error = cls.train(Xcut, ycut, Xtest, ytest)
                                 self.errors[cls.description][i, j] = error
 
-
-                xla._xla_callable.cache_clear()
+                        xla._xla_callable.cache_clear()
 
         print(self.errors)
+        self.data = data
         return self.errors
 
+    def plot(self):
+        errors = self.reduce()
+        errors |= {'samples trained on': self.sizes}
+        colors = iter(COLORS)
 
-
-class HOOHExp(Atoms):
-    class HOOH(VectorValuedKRR):
-        n_iter = 2
-
-
-ex = HOOHExp()
-ex.run()
-
-
-class Cubane(Atoms):
-    data = 'cubane.DFT.NVT.PBE-TS.l1t.MD.300K.R_E_F_D'
-    class Cubane(VectorValuedKRR):
-        n_iter = 2
-
-ex = Cubane()
-ex.run()
-
-class Glycine(Atoms):
-    data = 'glycine.DFT.PBE-TS.l1t.MD.500K.R_E_F_D'
-    class Glycine(VectorValuedKRR):
-        n_iter = 2
-
-X, y = get_data('cubane.DFT.NVT.PBE-TS.l1t.MD.300K.R_E_F_D')
-X.shape
-
-ex = Glycine()
-ex.run()
-
-class Alanine(Atoms):
-    data = 'alanine.DFT.PBE-TS.l1t.MD.500K.R_E_F_D'
-    class Alanine(VectorValuedKRR):
-        n_iter = 2
-
-ex = Alanine()
-ex.run()
-'''
-
-class Similarity(Experiment):
-    min_size = 5
-    max_size = 10
-    test_size = 1
-    n_subsets = 2
-    n_runs = 2
-    shuffle = False
-
-    class Matern(VectorValuedKRR):
-        n_iter = 2
-        kernel = kernel_matern
-
-    class Gauss(VectorValuedKRR):
-        n_iter = 2
-        kernel = kernel_gauss
-
-
-if __name__ == '__main__':
-    ex = Similarity()
-    ex.run()
-'''
+        errors = pd.DataFrame(errors)
+        classes = list(self.data.keys())
+        data = errors
+        fig, ax = plt.subplots()
+        for cls in classes:
+            desc = cls.description
+            sns.pointplot(x='samples trained on',
+                          y=f'error {desc}', data=data, color=next(colors), label=desc)
+        ax.legend(handles=ax.lines[::len(data)+1], labels=[cls.__name__ for cls in classes])
+        ax.set_ylabel('error')
+        fig_path = os.path.join(self.folder, 'learning_curve.png')
+        plt.savefig(fig_path)
+        mlflow.log_figure(fig, 'learning_curve.png')
+        mlflow.log_artifact(fig_path, '')
+        plt.show()
