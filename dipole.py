@@ -23,14 +23,15 @@ import mlflow.sklearn
 
 from utils import KRR, matern, binom, safe_sqrt, fill_diagonal, coulomb, gaussian, get_data
 
+OFFSET = 1e-6
 
-def kernel_matern(x, x_, sigma=1.0, n=2, descriptor=coulomb):
+def kernel_matern(x, x_, sigma=1.0, n=2, descriptor=coulomb, offset=OFFSET):
     v = n + 1/2
     N, D = x.shape
 
     Dx, Dx_ = descriptor(x), descriptor(x_)
     diff = x - x_
-    d = safe_sqrt(np.sum((Dx - Dx_)**2)) + 1e-1
+    d = safe_sqrt(np.sum((Dx - Dx_)**2)) + offset # we add this to avoid a math error during scoring
     d_scaled = np.sqrt(2 * v) * d / sigma
     B = np.exp(- d_scaled)
     Pn = sum([factorial(n + k) / factorial(2*n) * binom(n, k) * (2 * d_scaled)**(n-k) for k in range(n)])

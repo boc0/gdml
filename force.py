@@ -73,8 +73,8 @@ def kernel_big(x, x_, sigma=1.0, n=2, descriptor=coulomb):
         return sums
 
     K = vmap(vmap(kernel_pq, (0, None)), (None, 0))(rangeD, rangeD)
-    # K = (K + K.T) / 2
     K = K.reshape(3 * N, 3 * N)
+    K = (K + K.T) / 2
     return K
 
 

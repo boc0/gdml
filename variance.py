@@ -48,44 +48,72 @@ def variance(size):
 
     return errors, angles, results
 
-
-res = onp.load('results/variance/100.npz', allow_pickle=True)
+file = '100'
+res = onp.load(f'results/variance/{file}.npz', allow_pickle=True)
 list(res.keys())
 
 results = res['results'][1]
 results.keys()
 lambs, sigmas, scores = (onp.array(results[key]).astype(onp.float32) for key in ['param_lamb', 'param_sigma', 'mean_test_score'])
-lambs.shape
 
-lambs, sigmas = onp.meshgrid(lambs, sigmas)
-lambs.shape == sigmas.shape
-scores.shape
+lambs, sigmas, scores = lambs[:50], sigmas[:50], scores[:50]
+# lambs, sigmas = onp.meshgrid(lambs, sigmas)
 
-
-lambs.shape
-
-X = np.arange(-5, 5, 0.25)
-Y = np.arange(-5, 5, 0.25)
-X, Y = np.meshgrid(X, Y)
-R = np.sqrt(X**2 + Y**2)
-Z = np.sin(R)
-Z
+first = True
+last = None
+for score in scores:
+    last = score
+    if first: continue
 
 
+
+
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+x, y = lambs, sigmas
+# Compute z to make the pringle surface.
+z = np.sin(-x*y)
+
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+
+ax.plot_trisurf(np.log(x), np.log(y), -scores, linewidth=0.2, antialiased=True, cmap=plt.cm.viridis)
+ax = plt.gca()
+ax.xaxis.set_ticklabels([])
+ax.yaxis.set_ticklabels([])
+ax.zaxis.set_ticklabels([])
+
+plt.show()
+plt.savefig('rez.png')
+'''
 fig = plt.figure()
 ax = plt.axes(projection='3d')
 ax = fig.add_subplot(111, projection='3d')
-%matplotlib notebook
 ax.plot_trisurf(lambs, sigmas, scores)
-fig.savefig('rez.png')
-ax.savefig('rez.png')
-plt.show()
+
+'''
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+'''
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('size', type=int)
 
     size = parser.parse_args().size
     errors, angles, results = variance(size)
+'''
