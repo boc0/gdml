@@ -26,5 +26,7 @@ To run experiments use e.g.
 python3.9 -m experiments.similarity
 ```
 
+The resulting learning curves will be placed in the `experiments/results` folder.
+
 ---
 The `notebooks` folder contains jupyter notebooks in part deriving the implementaition of KRR for energy and then for dipole moment prediction, as well as one exploring the model's errors.
